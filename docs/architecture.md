@@ -12,14 +12,19 @@ The implementation separates:
 - public error conversion;
 - framework-neutral option factories.
 
-Phase 2 supports static, input-free GET option factories from
+Static, input-free GET option factories are available from
 `tq.createHelpers({ client })`. Property access records route segments without
 executing a request. TanStack starts the request through the generated
 `queryFn`, whose signal is forwarded to the official Treaty method.
 
-React bindings will use the same option factory rather than implementing a
-second request path. Query input and dynamic route parameters will extend the
-same key builder in later phases.
+Phase 3 adds one React context per `createTreatyQuery()` instance. `tq.Provider`
+stores only the supplied official Treaty client, and nested providers naturally
+override parents. `tq.health.get.useQuery()` reads that client, creates options
+through the same factory used by external helpers, and passes them to TanStack's
+native `useQuery`. There is no module-global client and no second request path.
+
+Query input and dynamic route parameters will extend the same proxies and key
+builder in later phases.
 
 Cache scopes will be optional and used only when a response depends on hidden
 server context. Public endpoints, and routes whose visible path or input already

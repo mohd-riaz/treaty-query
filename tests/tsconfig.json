@@ -4,6 +4,9 @@
     "isolatedDeclarations": false,
     "types": ["bun"]
   },
-  "include": ["./static-get.test.ts"],
+  "include": [
+    "./static-get.test.ts",
+    "./react-use-query.test.tsx"
+  ],
   "exclude": ["./consumer"]
 }

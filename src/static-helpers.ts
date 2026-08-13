@@ -19,7 +19,7 @@ type MethodResult<TMethod> = TMethod extends (
   : never;
 
 type SuccessResult<TResult> = Extract<TResult, { readonly error: null }>;
-type SuccessData<TMethod> = SuccessResult<MethodResult<TMethod>> extends {
+export type StaticGetData<TMethod> = SuccessResult<MethodResult<TMethod>> extends {
   readonly data: infer TData;
 }
   ? TData extends undefined
@@ -43,7 +43,7 @@ type DeclaredTreatyQueryError<TError> = TError extends {
     : TreatyQueryError<TStatus, TValue>
   : never;
 
-type StaticGetError<TMethod> =
+export type StaticGetError<TMethod> =
   | DeclaredTreatyQueryError<ErrorValue<TMethod>>
   | TreatyQueryError<503, unknown>;
 
@@ -68,14 +68,14 @@ type StaticHelperKey<TNode, TKey> = TKey extends string
   : never;
 
 export interface StaticGetOperation<TMethod> {
-  queryOptions<TData = SuccessData<TMethod>>(
+  queryOptions<TData = StaticGetData<TMethod>>(
     options?: StaticGetQueryOptionsInput<
-      SuccessData<TMethod>,
+      StaticGetData<TMethod>,
       StaticGetError<TMethod>,
       TData
     >,
   ): StaticGetQueryOptions<
-    SuccessData<TMethod>,
+    StaticGetData<TMethod>,
     StaticGetError<TMethod>,
     TData
   >;
@@ -92,7 +92,7 @@ function readProperty(value: unknown, property: string): unknown {
   return (value as Record<string, unknown>)[property];
 }
 
-function createGetOperation<TMethod>(
+export function createStaticGetOperation<TMethod>(
   method: TMethod,
   path: readonly string[],
   keyPrefix: readonly SerializableValue[] | undefined,
@@ -105,29 +105,29 @@ function createGetOperation<TMethod>(
   const staticGetMethod = method as StaticGetMethod;
 
   return Object.freeze({
-    queryOptions<TData = SuccessData<TMethod>>(
+    queryOptions<TData = StaticGetData<TMethod>>(
       options: StaticGetQueryOptionsInput<
-        SuccessData<TMethod>,
+        StaticGetData<TMethod>,
         StaticGetError<TMethod>,
         TData
       > = {},
     ): StaticGetQueryOptions<
-      SuccessData<TMethod>,
+      StaticGetData<TMethod>,
       StaticGetError<TMethod>,
       TData
     > {
       const queryFn = async (
         context: QueryFunctionContext<TreatyQueryKey>,
-      ): Promise<SuccessData<TMethod>> =>
+      ): Promise<StaticGetData<TMethod>> =>
         (await executeStaticGet(
           staticGetMethod,
           context.signal,
-        )) as SuccessData<TMethod>;
+        )) as StaticGetData<TMethod>;
 
       return {
         ...options,
         queryKey: queryKey as StaticGetQueryOptions<
-          SuccessData<TMethod>,
+          StaticGetData<TMethod>,
           StaticGetError<TMethod>,
           TData
         >["queryKey"],
@@ -150,7 +150,7 @@ function createRouteProxy(
       const nextClientNode = readProperty(clientNode, property);
 
       if (property === "get" && typeof nextClientNode === "function") {
-        return createGetOperation(nextClientNode, path, keyPrefix);
+        return createStaticGetOperation(nextClientNode, path, keyPrefix);
       }
 
       return createRouteProxy(nextClientNode, [...path, property], keyPrefix);

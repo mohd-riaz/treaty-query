@@ -9,7 +9,8 @@ import {
 
 const app = new Elysia().get("/health", () => ({ ok: true }));
 const client = treaty(app);
-const helpers = createTreatyQuery<typeof app>().createHelpers({ client });
+const tq = createTreatyQuery<typeof app>();
+const helpers = tq.createHelpers({ client });
 const options = helpers.health.get.queryOptions({ staleTime: 1_000 });
 const queryClient = new QueryClient();
 const data = await queryClient.fetchQuery(options);
@@ -26,4 +27,8 @@ if (!(TreatyQueryError.prototype instanceof Error)) {
   throw new Error("The packed treaty-query error export is invalid.");
 }
 
-console.log(`Consumed treaty-query ${version} static GET options`);
+if (typeof tq.Provider !== "function" || typeof tq.health.get.useQuery !== "function") {
+  throw new Error("The packed treaty-query React API is invalid.");
+}
+
+console.log(`Consumed treaty-query ${version} helpers and React API`);

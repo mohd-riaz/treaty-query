@@ -2,9 +2,53 @@
 
 Type-safe TanStack Query bindings for Elysia Treaty clients.
 
-> **Status:** early development. Static, input-free GET option factories are
-> implemented. React hooks, dynamic parameters, query input, mutations, and
-> cache scopes are not implemented yet.
+> **Status:** early development. Static, input-free GET option factories and
+> React `useQuery` hooks are implemented. Dynamic parameters, query input,
+> mutations, and cache scopes are not implemented yet.
+
+## React useQuery
+
+Create one Treaty Query instance, provide an existing official Treaty client,
+and keep TanStack's ordinary `QueryClientProvider`:
+
+```tsx
+import { treaty } from "@elysiajs/eden";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { App } from "./server";
+import { createTreatyQuery } from "treaty-query";
+
+const api = treaty<App>("https://api.example.com");
+const queryClient = new QueryClient();
+const tq = createTreatyQuery<App>();
+
+export function Root() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <tq.Provider client={api}>
+        <Application />
+      </tq.Provider>
+    </QueryClientProvider>
+  );
+}
+```
+
+Static GET hooks infer their data and error types from the Treaty client:
+
+```tsx
+function Health() {
+  const health = tq.health.get.useQuery(undefined, {
+    staleTime: 30_000,
+    select: (data) => data.ok,
+  });
+
+  return <span>{health.data ? "up" : "down"}</span>;
+}
+```
+
+The first argument is currently `undefined` because semantic query input is a
+later phase. TanStack options are the second argument, matching the future
+input-bearing call shape. A hook must be rendered under the `Provider` from the
+same `createTreatyQuery()` instance. Nested providers use the nearest client.
 
 ## Static GET query options
 
@@ -20,7 +64,6 @@ import { createTreatyQuery } from "treaty-query";
 const api = treaty<App>("https://api.example.com");
 const queryClient = new QueryClient();
 
-const tq = createTreatyQuery<App>();
 const helpers = tq.createHelpers({ client: api });
 
 const healthOptions = helpers.health.get.queryOptions({
@@ -30,9 +73,10 @@ const healthOptions = helpers.health.get.queryOptions({
 const health = await queryClient.fetchQuery(healthOptions);
 ```
 
-Creating the options is lazy. The request starts only when TanStack invokes the
-generated `queryFn`. Successful Treaty data is unwrapped, the TanStack abort
-signal is forwarded, and failed results throw `TreatyQueryError`.
+Hooks and helpers share this exact option factory. Creating the options is
+lazy. The request starts only when TanStack invokes the generated `queryFn`.
+Successful Treaty data is unwrapped, the TanStack abort signal is forwarded,
+and failed results throw `TreatyQueryError`.
 
 Generated keys are namespaced and contain the static route and operation:
 

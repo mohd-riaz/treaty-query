@@ -13,3 +13,6 @@ All notable changes to this project will be documented in this file.
 - Lazy Treaty execution with TanStack abort-signal forwarding.
 - `TreatyQueryError` conversion for HTTP and transport failures.
 - Successful Treaty data unwrapping and `undefined`-to-`null` normalization.
+- Instance-local React `Provider` and static GET `useQuery` hooks.
+- Shared hook/helper execution and query-key behavior.
+- Nested-provider override and missing-provider diagnostics.
