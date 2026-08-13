@@ -41,6 +41,7 @@ const allowedFiles = new Set([
   "CHANGELOG.md",
   "CONTRIBUTING.md",
   "docs/compatibility.md",
+  "docs/releasing.md",
   "LICENSE",
   "README.md",
   "dist/index.d.mts",

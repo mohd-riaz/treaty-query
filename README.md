@@ -2,9 +2,20 @@
 
 Type-safe TanStack Query bindings for Elysia Treaty clients.
 
-> **Status:** early development. GET option factories, React `useQuery`,
-> dynamic path parameters, mutations, optional cache scopes, and essential
-> typed cache utilities are implemented.
+> **Status:** `0.1.0` release candidate. The API is ready for initial release
+> review but has not been published yet.
+
+## Installation
+
+Install Treaty Query alongside its peer dependencies:
+
+```sh
+bun add treaty-query @elysiajs/eden @tanstack/react-query elysia react
+```
+
+The package is ESM-only and requires Node.js 18 or newer (or a compatible Bun
+runtime). See [the tested compatibility matrix](./docs/compatibility.md) before
+choosing peer versions.
 
 ## React useQuery
 
@@ -485,6 +496,8 @@ bun run audit:package
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) before proposing changes.
+Maintainers should follow [the release procedure](./docs/releasing.md); it
+contains a hard stop before publication.
 
 ## License
 
