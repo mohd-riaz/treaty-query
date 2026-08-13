@@ -85,6 +85,28 @@ Hooks and helpers share the exact key builder and execution path. Creating
 options is lazy. Successful Treaty data is unwrapped, the TanStack abort signal
 is forwarded, and failed results throw `TreatyQueryError`.
 
+Configure a global mapper when the application has its own API error class.
+The second generic preserves that mapped error type across hooks, helpers,
+mutations, and `ensureData`:
+
+```ts
+class ApplicationApiError extends Error {
+  constructor(readonly status: number, options: ErrorOptions) {
+    super(`API request failed (${status})`, options);
+  }
+}
+
+const tq = createTreatyQuery<App, ApplicationApiError>({
+  mapError(error) {
+    return new ApplicationApiError(error.status, { cause: error });
+  },
+});
+```
+
+`mapError` must return an `Error`. If it throws or returns another value,
+Treaty Query throws `TreatyQueryErrorMappingError`, which retains both the
+original `TreatyQueryError` and the mapper failure.
+
 Transport-only data belongs under `request` in argument two. It is forwarded
 to Treaty but excluded from the cache key:
 
@@ -417,6 +439,38 @@ entries and do not receive cache scopes.
 Mutation query parameters are intentionally fixed when the mutation observer
 is created. Create another observer when those parameters need to change.
 
+## Reserved route names
+
+Most route names—including `get`, `post`, `queryOptions`, `useQuery`,
+`constructor`, and `toString`—work through ordinary traversal. Use the exported
+`routeSegment` symbol when a route collides with a root/helper member, utility
+member, HTTP terminal, or Promise-like name:
+
+```ts
+import { routeSegment } from "treaty-query";
+
+tq[routeSegment]("Provider").get.useQuery();
+helpers[routeSegment]("then").get.queryOptions();
+helpers[routeSegment]("get").get.queryOptions();
+utils[routeSegment]("invalidate").get.queryKey();
+```
+
+Treaty Query proxies deliberately expose `.then`, `.catch`, and `.finally` as
+undefined so `await`, `Promise.resolve`, and framework runtimes do not mistake
+them for promises. The symbol escape is type-safe and is included in generated
+keys as the original string segment.
+
+## Compatibility and limitations
+
+The first release exposes GET as a query and POST, PUT, PATCH, and DELETE as
+mutations. HEAD, OPTIONS, CONNECT, and subscription routes are not exposed in
+the typed adapter yet. Use the official Treaty client directly for those
+methods.
+
+See [the tested compatibility matrix](./docs/compatibility.md) for exact peer
+versions. The declared peer ranges express intended semver compatibility; the
+matrix distinguishes versions verified by the package-consumer tests.
+
 ## Development
 
 Development uses [Bun](https://bun.sh/):
@@ -427,6 +481,7 @@ bun run check-types
 bun test
 bun run build
 bun pm pack
+bun run audit:package
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) before proposing changes.

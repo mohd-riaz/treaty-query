@@ -17,14 +17,16 @@
     "dist",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
+    "docs/compatibility.md",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "build": "tsdown",
-    "check-types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
+    "build": "bun node_modules/tsdown/dist/run.mjs",
+    "check-types": "bun node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && bun node_modules/typescript/bin/tsc --noEmit -p tests/tsconfig.json",
     "test": "bun test",
     "pack": "bun pm pack",
+    "audit:package": "bun run build && bun pm pack && bun run scripts/audit-package.ts",
     "prepublishOnly": "bun run check-types && bun test && bun run build"
   },
   "peerDependencies": {

@@ -12,6 +12,7 @@ import { type ReactElement } from "react";
 
 import {
   createTreatyQuery,
+  routeSegment,
   TreatyQueryError,
   type CacheScope,
   type TreatyQueryUtils,
@@ -82,6 +83,21 @@ const alternateApp = new Elysia()
     },
   );
 const alternateClient = treaty(alternateApp);
+const collisionApp = new Elysia()
+  .get("/then", () => ({ route: "then" as const }))
+  .get("/catch", () => ({ route: "catch" as const }))
+  .get("/finally", () => ({ route: "finally" as const }))
+  .get("/get", () => ({ route: "get" as const }))
+  .post("/post", () => ({ route: "post" as const }))
+  .get("/Provider", () => ({ route: "Provider" as const }))
+  .get("/invalidate", () => ({ route: "invalidate" as const }))
+  .get("/queryKey", () => ({ route: "queryKey" as const }))
+  .get("/queryOptions", () => ({ route: "queryOptions" as const }))
+  .get("/useQuery", () => ({ route: "useQuery" as const }))
+  .get("/constructor", () => ({ route: "constructor" as const }))
+  .get("/toString", () => ({ route: "toString" as const }));
+const collisionClient = treaty(collisionApp);
+const collisionTq = createTreatyQuery<typeof collisionApp>();
 
 GlobalRegistrator.register({
   url: "http://localhost/",
@@ -605,5 +621,101 @@ describe("React static GET useQuery", () => {
 
     expect(queryClient.getQueryState(coffee)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(tea)?.isInvalidated).toBe(true);
+  });
+
+  test("escapes reserved route names without making proxies promise-like", async () => {
+    const queryClient = createQueryClient();
+    const helpers = collisionTq.createHelpers({ client: collisionClient });
+    let thenData: { route: "then" } | undefined;
+    let providerData: { route: "Provider" } | undefined;
+    let invalidationKey: readonly unknown[] | undefined;
+
+    expect(await Promise.resolve(helpers)).toBe(helpers);
+    expect((helpers as { readonly then?: unknown }).then).toBeUndefined();
+    expect((helpers as { readonly catch?: unknown }).catch).toBeUndefined();
+    expect((helpers as { readonly finally?: unknown }).finally).toBeUndefined();
+    expect((collisionTq as { readonly then?: unknown }).then).toBeUndefined();
+
+    expect(
+      await queryClient.fetchQuery(
+        helpers[routeSegment]("then").get.queryOptions(),
+      ),
+    ).toEqual({ route: "then" });
+    expect(
+      await queryClient.fetchQuery(
+        helpers[routeSegment]("catch").get.queryOptions(),
+      ),
+    ).toEqual({ route: "catch" });
+    expect(
+      await queryClient.fetchQuery(
+        helpers[routeSegment]("finally").get.queryOptions(),
+      ),
+    ).toEqual({ route: "finally" });
+    expect(
+      await queryClient.fetchQuery(
+        helpers[routeSegment]("get").get.queryOptions(),
+      ),
+    ).toEqual({ route: "get" });
+    expect(
+      await queryClient.fetchQuery(
+        helpers.constructor.get.queryOptions(),
+      ),
+    ).toEqual({ route: "constructor" });
+    expect(
+      await queryClient.fetchQuery(
+        helpers.toString.get.queryOptions(),
+      ),
+    ).toEqual({ route: "toString" });
+    expect(
+      await queryClient.fetchQuery(
+        helpers.queryOptions.get.queryOptions(),
+      ),
+    ).toEqual({ route: "queryOptions" });
+    expect(
+      await queryClient.fetchQuery(
+        helpers.useQuery.get.queryOptions(),
+      ),
+    ).toEqual({ route: "useQuery" });
+
+    const post = helpers[routeSegment]("post").post.mutationOptions();
+    expect(
+      await post.mutationFn(undefined, {
+        client: queryClient,
+        meta: undefined,
+        mutationKey: post.mutationKey,
+      }),
+    ).toEqual({ route: "post" });
+
+    function Probe(): null {
+      thenData = collisionTq[routeSegment]("then").get.useQuery().data;
+      providerData = collisionTq[routeSegment]("Provider").get.useQuery().data;
+      invalidationKey = collisionTq
+        .useUtils()
+        [routeSegment]("invalidate")
+        .get.queryKey();
+      return null;
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <collisionTq.Provider client={collisionClient}>
+          <Probe />
+        </collisionTq.Provider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(thenData).toEqual({ route: "then" });
+      expect(providerData).toEqual({ route: "Provider" });
+    });
+    expect(invalidationKey).toEqual([
+      "treaty-query",
+      ["invalidate"],
+      { kind: "query", method: "GET" },
+    ]);
+
+    expect(() =>
+      (helpers[routeSegment] as (segment: string) => unknown)(""),
+    ).toThrow("cannot be empty");
   });
 });

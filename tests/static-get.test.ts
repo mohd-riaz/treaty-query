@@ -3,7 +3,11 @@ import { treaty } from "@elysiajs/eden";
 import { QueryClient } from "@tanstack/react-query";
 import { Elysia, t } from "elysia";
 
-import { createTreatyQuery, TreatyQueryError } from "../src/index";
+import {
+  createTreatyQuery,
+  TreatyQueryError,
+  TreatyQueryErrorMappingError,
+} from "../src/index";
 
 let healthCalls = 0;
 
@@ -29,6 +33,15 @@ const app = new Elysia()
       },
     },
   )
+  .get("/badrequest", ({ status }) =>
+    status(400, { code: "BAD_REQUEST" as const }))
+  .get("/missing", ({ status }) =>
+    status(404, { code: "NOT_FOUND" as const }))
+  .get("/servererror", ({ status }) =>
+    status(500, { code: "SERVER_ERROR" as const }))
+  .get("/empty", ({ status }) => status(204))
+  .head("/metadata", () => undefined)
+  .options("/capabilities", () => ({ allow: ["GET"] }))
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
   })
@@ -68,6 +81,17 @@ type Equal<TLeft, TRight> =
 type Expect<TValue extends true> = TValue;
 
 describe("static GET query options", () => {
+  test("keeps unsupported protocol methods out of the typed adapter", () => {
+    if (false) {
+      // @ts-expect-error HEAD is intentionally delegated to Treaty in 0.1.
+      helpers.metadata.head.queryOptions();
+      // @ts-expect-error OPTIONS is intentionally delegated to Treaty in 0.1.
+      helpers.capabilities.options.queryOptions();
+    }
+
+    expect(true).toBe(true);
+  });
+
   test("builds an immutable, namespaced key without executing the request", () => {
     healthCalls = 0;
 
@@ -142,6 +166,139 @@ describe("static GET query options", () => {
       expect(error.response).toBeInstanceOf(Response);
       expect(error.cause).toBeDefined();
     }
+  });
+
+  test("preserves several declared HTTP status values", async () => {
+    const queryClient = createQueryClient();
+    const cases = [
+      [
+        queryClient.fetchQuery(helpers.badrequest.get.queryOptions()),
+        400,
+        "BAD_REQUEST",
+      ],
+      [
+        queryClient.fetchQuery(helpers.missing.get.queryOptions()),
+        404,
+        "NOT_FOUND",
+      ],
+      [
+        queryClient.fetchQuery(helpers.servererror.get.queryOptions()),
+        500,
+        "SERVER_ERROR",
+      ],
+    ] as const;
+
+    for (const [request, expectedStatus, expectedCode] of cases) {
+      try {
+        await request;
+        throw new Error("Expected the Treaty request to fail.");
+      } catch (error) {
+        expect(error).toBeInstanceOf(TreatyQueryError);
+        if (!(error instanceof TreatyQueryError)) throw error;
+        expect(error.status).toBe(expectedStatus);
+        expect(error.value).toEqual({ code: expectedCode });
+      }
+    }
+  });
+
+  test("normalizes empty successful responses to null", async () => {
+    const data = await createQueryClient().fetchQuery(
+      helpers.empty.get.queryOptions(),
+    );
+    expect(data).toBeNull();
+  });
+
+  test("maps normalized errors and retains both failures if mapping throws", async () => {
+    class ApplicationApiError extends Error {
+      constructor(readonly status: number, options: ErrorOptions) {
+        super(`API ${status}`, options);
+      }
+    }
+
+    const mappedHelpers = createTreatyQuery<typeof app, ApplicationApiError>({
+      mapError(error) {
+        return new ApplicationApiError(error.status, { cause: error });
+      },
+    }).createHelpers({ client });
+
+    const broadMapped = createTreatyQuery<typeof app>({
+      mapError(error) {
+        return new ApplicationApiError(error.status, { cause: error });
+      },
+    });
+
+    if (false) {
+      const mappedTq = createTreatyQuery<typeof app, ApplicationApiError>({
+        mapError(error) {
+          return new ApplicationApiError(error.status, { cause: error });
+        },
+      });
+      const result = mappedTq.failure.get.useQuery();
+      const mappedError:
+        | ApplicationApiError
+        | TreatyQueryErrorMappingError
+        | null = result.error;
+      void mappedError;
+      const broadResult = broadMapped.failure.get.useQuery();
+      const broadError: Error | null = broadResult.error;
+      void broadError;
+    }
+
+    await expect(
+      createQueryClient().fetchQuery(
+        mappedHelpers.failure.get.queryOptions(undefined, { retry: false }),
+      ),
+    ).rejects.toBeInstanceOf(ApplicationApiError);
+
+    const mapperCause = new Error("mapper failed");
+    const brokenHelpers = createTreatyQuery<typeof app, Error>({
+      mapError() {
+        throw mapperCause;
+      },
+    }).createHelpers({ client });
+
+    try {
+      await createQueryClient().fetchQuery(
+        brokenHelpers.failure.get.queryOptions(undefined, { retry: false }),
+      );
+      throw new Error("Expected error mapping to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TreatyQueryErrorMappingError);
+      if (!(error instanceof TreatyQueryErrorMappingError)) throw error;
+      expect(error.originalError).toBeInstanceOf(TreatyQueryError);
+      expect(error.originalError.status).toBe(401);
+      expect(error.mapperCause).toBe(mapperCause);
+      expect(error.cause).toBe(mapperCause);
+    }
+
+    const invalidMapperHelpers = createTreatyQuery<typeof app, Error>({
+      mapError: (() => ({ invalid: true })) as unknown as (
+        error: TreatyQueryError,
+      ) => Error,
+    }).createHelpers({ client });
+
+    await expect(
+      createQueryClient().fetchQuery(
+        invalidMapperHelpers.failure.get.queryOptions(undefined, {
+          retry: false,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(TreatyQueryErrorMappingError);
+  });
+
+  test("rejects an invalid Treaty structured result with a neutral message", async () => {
+    const invalidClient = {
+      health: {
+        get: async () => ({ nope: true }),
+      },
+    } as unknown as typeof client;
+    const invalidHelpers = tq.createHelpers({ client: invalidClient });
+
+    await expect(
+      createQueryClient().fetchQuery(
+        invalidHelpers.health.get.queryOptions(undefined, { retry: false }),
+      ),
+    ).rejects.toThrow("Treaty returned an invalid structured result.");
   });
 
   test("forwards the TanStack abort signal to Treaty", async () => {

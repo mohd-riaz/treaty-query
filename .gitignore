@@ -4,4 +4,5 @@ dist/
 .DS_Store
 tests/consumer/bun.lock
 tests/consumer/node_modules/
-
+tests/consumer-lower/bun.lock
+tests/consumer-lower/node_modules/

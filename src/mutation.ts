@@ -6,8 +6,9 @@ import {
   type MutationRequestOptions,
 } from "./execute.js";
 import { createMutationKey } from "./query-key.js";
+import type { TreatyQueryErrorMapper } from "./error.js";
 import type { RouteSegment } from "./route.js";
-import type { GetData, GetError } from "./static-helpers.js";
+import type { GetData, QueryError } from "./static-helpers.js";
 import type {
   MutationOptionsInput,
   SerializableValue,
@@ -51,42 +52,56 @@ type MutationRequestField<TMethod> =
 export type MutationOperationOptions<
   TMethod,
   TOnMutateResult = unknown,
+  TMappedError extends Error | undefined = undefined,
 > = MutationOptionsInput<
   GetData<TMethod>,
-  GetError<TMethod>,
+  QueryError<TMethod, TMappedError>,
   MutationBody<TMethod>,
   TOnMutateResult
 > & MutationRequestField<TMethod>;
 
 export type MutationData<TMethod> = GetData<TMethod>;
-export type MutationError<TMethod> = GetError<TMethod>;
+export type MutationError<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> = QueryError<TMethod, TMappedError>;
 
 export type MutationFactoryResult<
   TMethod,
   TOnMutateResult = unknown,
+  TMappedError extends Error | undefined = undefined,
 > = TreatyMutationOptions<
   MutationData<TMethod>,
-  MutationError<TMethod>,
+  MutationError<TMethod, TMappedError>,
   MutationBody<TMethod>,
   TOnMutateResult
 >;
 
-export interface RequiredMutationOperation<TMethod> {
+export interface RequiredMutationOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   mutationOptions<TOnMutateResult = unknown>(
-    options: MutationOperationOptions<TMethod, TOnMutateResult>,
-  ): MutationFactoryResult<TMethod, TOnMutateResult>;
+    options: MutationOperationOptions<TMethod, TOnMutateResult, TMappedError>,
+  ): MutationFactoryResult<TMethod, TOnMutateResult, TMappedError>;
 }
 
-export interface OptionalMutationOperation<TMethod> {
+export interface OptionalMutationOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   mutationOptions<TOnMutateResult = unknown>(
-    options?: MutationOperationOptions<TMethod, TOnMutateResult>,
-  ): MutationFactoryResult<TMethod, TOnMutateResult>;
+    options?: MutationOperationOptions<TMethod, TOnMutateResult, TMappedError>,
+  ): MutationFactoryResult<TMethod, TOnMutateResult, TMappedError>;
 }
 
-export type MutationOperation<TMethod> =
+export type MutationOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> =
   {} extends MutationRequest<TMethod>
-    ? OptionalMutationOperation<TMethod>
-    : RequiredMutationOperation<TMethod>;
+    ? OptionalMutationOperation<TMethod, TMappedError>
+    : RequiredMutationOperation<TMethod, TMappedError>;
 
 export function isMutationMethodName(
   value: string,
@@ -101,12 +116,16 @@ function toMutationMethod(method: MutationMethodName): TreatyMutationMethod {
   return method.toUpperCase() as TreatyMutationMethod;
 }
 
-export function createMutationOperation<TMethod>(
+export function createMutationOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+>(
   treatyMethod: TMethod,
   method: MutationMethodName,
   route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
-): MutationOperation<TMethod> {
+  mapError?: TreatyQueryErrorMapper,
+): MutationOperation<TMethod, TMappedError> {
   if (typeof treatyMethod !== "function") {
     throw new TypeError(`Treaty route has no ${method.toUpperCase()} method.`);
   }
@@ -114,9 +133,12 @@ export function createMutationOperation<TMethod>(
   const executableMethod = treatyMethod as MutationMethod;
   const operation = Object.freeze({
     mutationOptions<TOnMutateResult = unknown>(
-      options: MutationOperationOptions<TMethod, TOnMutateResult> = {} as
-        MutationOperationOptions<TMethod, TOnMutateResult>,
-    ): MutationFactoryResult<TMethod, TOnMutateResult> {
+      options: MutationOperationOptions<
+        TMethod,
+        TOnMutateResult,
+        TMappedError
+      > = {} as MutationOperationOptions<TMethod, TOnMutateResult, TMappedError>,
+    ): MutationFactoryResult<TMethod, TOnMutateResult, TMappedError> {
       const { request, ...tanstackOptions } = options;
       const runtimeRequest = request as MutationRequestOptions | undefined;
       const mutationKey: TreatyMutationKey = createMutationKey(
@@ -134,15 +156,20 @@ export function createMutationOperation<TMethod>(
           executableMethod,
           body,
           runtimeRequest,
+          mapError,
         )) as MutationData<TMethod>;
 
       return {
         ...tanstackOptions,
         mutationKey,
         mutationFn,
-      } as unknown as MutationFactoryResult<TMethod, TOnMutateResult>;
+      } as unknown as MutationFactoryResult<
+        TMethod,
+        TOnMutateResult,
+        TMappedError
+      >;
     },
   });
 
-  return operation as MutationOperation<TMethod>;
+  return operation as MutationOperation<TMethod, TMappedError>;
 }

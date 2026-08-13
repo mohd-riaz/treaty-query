@@ -1,14 +1,18 @@
 export {
   createTreatyQuery,
   type CreateHelpersOptions,
+  type CreateTreatyQueryFactory,
   type CreateTreatyQueryOptions,
   type TreatyQueryClient,
   type TreatyQueryRoot,
 } from "./create-treaty-query.js";
 export {
   TreatyQueryError,
+  TreatyQueryErrorMappingError,
   type TreatyQueryErrorOptions,
+  type TreatyQueryErrorMapper,
 } from "./error.js";
+export { routeSegment } from "./route.js";
 export type {
   MutationBody,
   MutationData,

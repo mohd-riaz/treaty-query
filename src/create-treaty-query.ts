@@ -14,11 +14,15 @@ import {
 } from "./react.js";
 import type { TreatyQueryUtils } from "./utils.js";
 import type { CacheScope, SerializableValue } from "./types.js";
+import type {
+  TreatyQueryError,
+} from "./error.js";
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any>;
 
-export interface CreateTreatyQueryOptions {
+export interface CreateTreatyQueryOptions<TMappedError extends Error = Error> {
   readonly keyPrefix?: readonly SerializableValue[];
+  readonly mapError?: (error: TreatyQueryError) => TMappedError;
 }
 
 export interface CreateHelpersOptions<TApp extends AnyElysia> {
@@ -26,48 +30,86 @@ export interface CreateHelpersOptions<TApp extends AnyElysia> {
   readonly cacheScope?: CacheScope;
 }
 
-export interface TreatyQueryRoot<TApp extends AnyElysia> {
+export interface TreatyQueryRoot<
+  TApp extends AnyElysia,
+  TMappedError extends Error | undefined = undefined,
+> {
   readonly Provider: TreatyQueryProvider<TApp>;
   readonly CacheScope: CacheScopeProvider;
-  useUtils(): TreatyQueryUtils<Treaty.Create<TApp>>;
+  useUtils(): TreatyQueryUtils<Treaty.Create<TApp>, TMappedError>;
   createHelpers(
     options: CreateHelpersOptions<TApp>,
-  ): TreatyQueryHelpers<Treaty.Create<TApp>>;
+  ): TreatyQueryHelpers<Treaty.Create<TApp>, TMappedError>;
 }
 
-export type TreatyQueryClient<TApp extends AnyElysia> =
-  & TreatyQueryRoot<TApp>
-  & TreatyQueryHooks<Treaty.Create<TApp>>;
+export type TreatyQueryClient<
+  TApp extends AnyElysia,
+  TMappedError extends Error | undefined = undefined,
+> =
+  & TreatyQueryRoot<TApp, TMappedError>
+  & TreatyQueryHooks<Treaty.Create<TApp>, TMappedError>;
 
-export function createTreatyQuery<TApp extends AnyElysia>(
+type CreateTreatyQueryOptionsWithoutMapper = Omit<
+  CreateTreatyQueryOptions,
+  "mapError"
+> & { readonly mapError?: undefined };
+
+export interface CreateTreatyQueryFactory {
+  <TApp extends AnyElysia>(
+    options?: CreateTreatyQueryOptionsWithoutMapper,
+  ): TreatyQueryClient<TApp>;
+  <TApp extends AnyElysia>(
+    options: CreateTreatyQueryOptions,
+  ): TreatyQueryClient<TApp, Error>;
+  <TApp extends AnyElysia, TMappedError extends Error>(
+    options: CreateTreatyQueryOptions<TMappedError>,
+  ): TreatyQueryClient<TApp, TMappedError>;
+}
+
+function createTreatyQueryImplementation(
   options: CreateTreatyQueryOptions = {},
-): TreatyQueryClient<TApp> {
-  const reactRuntime = createReactTreatyQueryRuntime<TApp>(options.keyPrefix);
-  const root: TreatyQueryRoot<TApp> = Object.freeze({
+): TreatyQueryClient<AnyElysia, Error | undefined> {
+  const reactRuntime = createReactTreatyQueryRuntime<
+    AnyElysia,
+    Error | undefined
+  >(
+    options.keyPrefix,
+    options.mapError,
+  );
+  const root: TreatyQueryRoot<AnyElysia, Error | undefined> = Object.freeze({
     Provider: reactRuntime.Provider,
     CacheScope: reactRuntime.CacheScope,
     useUtils: reactRuntime.useUtils,
     createHelpers(
-      helperOptions: CreateHelpersOptions<TApp>,
-    ): TreatyQueryHelpers<Treaty.Create<TApp>> {
-      return createTreatyQueryHelpers(
+      helperOptions: CreateHelpersOptions<AnyElysia>,
+    ): TreatyQueryHelpers<Treaty.Create<AnyElysia>, Error | undefined> {
+      return createTreatyQueryHelpers<
+        Treaty.Create<AnyElysia>,
+        Error | undefined
+      >(
         helperOptions.client,
         options.keyPrefix,
         helperOptions.cacheScope === undefined
           ? undefined
           : normalizeCacheScope(helperOptions.cacheScope),
+        options.mapError,
       );
     },
   });
 
   return new Proxy(root, {
     get(target, property, receiver): unknown {
-      if (property === "then") return undefined;
+      if (property === "then" || property === "catch" || property === "finally") {
+        return undefined;
+      }
       if (Reflect.has(target, property)) {
         return Reflect.get(target, property, receiver);
       }
 
       return Reflect.get(reactRuntime.routes, property);
     },
-  }) as TreatyQueryClient<TApp>;
+  }) as TreatyQueryClient<AnyElysia, Error | undefined>;
 }
+
+export const createTreatyQuery = createTreatyQueryImplementation as
+  CreateTreatyQueryFactory;

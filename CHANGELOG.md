@@ -35,3 +35,9 @@ All notable changes to this project will be documented in this file.
 - Verified `createHelpers()` integration with real TanStack Router loaders.
 - Verified request-local QueryClient isolation and dehydration/hydration key
   stability for public and scoped queries.
+- Symbol-escaped reserved route segments without Promise assimilation.
+- Optional typed global error mapping with mapper-failure preservation.
+- Expanded HTTP error, empty-response, malformed-result, and performance tests.
+- Packed-consumer verification at declared lower peer bounds and the project
+  baseline.
+- Automated bundle, publish-content, size, and runtime-peer license audits.

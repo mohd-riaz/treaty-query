@@ -109,4 +109,6 @@ if (false) {
   void typedProduct;
 }
 
-console.log(`Consumed treaty-query ${version} Phase 8 API`);
+queryClient.clear();
+hydratedQueryClient.clear();
+console.log(`Consumed treaty-query ${version} hardened API`);

@@ -1,5 +1,5 @@
 {
-  "name": "treaty-query-package-consumer",
+  "name": "treaty-query-lower-bound-consumer",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,8 +8,8 @@
   "dependencies": {
     "@elysiajs/eden": "1.4.9",
     "@tanstack/react-query": "5.101.4",
-    "elysia": "1.4.29",
-    "react": "19.2.8",
+    "elysia": "1.4.19",
+    "react": "18.2.0",
     "treaty-query": "file:../../treaty-query-0.1.0.tgz",
     "typescript": "5.9.2"
   }

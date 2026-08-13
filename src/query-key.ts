@@ -43,7 +43,9 @@ function createPathKey(
     route.map((segment) =>
       typeof segment === "string"
         ? segment
-        : createParameterKey(segment.value),
+        : segment.kind === "escaped"
+          ? segment.value
+          : createParameterKey(segment.value),
     ),
   );
 }

@@ -12,6 +12,7 @@ bun install
 bun run check-types
 bun test
 bun run build
+bun run audit:package
 ```
 
 Before submitting a package-related change, also run `bun pm pack` and inspect

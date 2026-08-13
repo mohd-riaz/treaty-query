@@ -1,4 +1,8 @@
-import { TreatyQueryError } from "./error.js";
+import {
+  applyTreatyQueryErrorMapper,
+  TreatyQueryError,
+  type TreatyQueryErrorMapper,
+} from "./error.js";
 
 export interface StaticGetRequestOptions {
   readonly query?: unknown;
@@ -72,33 +76,41 @@ function getHeaders(value: unknown): HeadersInit | undefined {
 
 async function executeTreatyRequest(
   invoke: () => Promise<unknown>,
+  mapError?: TreatyQueryErrorMapper,
 ): Promise<unknown> {
   let result: unknown;
   try {
     result = await invoke();
   } catch (cause) {
     if (isRecord(cause) && typeof cause.status === "number") {
-      throw new TreatyQueryError(cause.status, getErrorValue(cause), { cause });
+      throw applyTreatyQueryErrorMapper(
+        new TreatyQueryError(cause.status, getErrorValue(cause), { cause }),
+        mapError,
+      );
     }
 
     throw cause;
   }
 
   if (!isTreatyResult(result)) {
-    throw new TypeError("Treaty GET returned an invalid structured result.");
+    throw new TypeError("Treaty returned an invalid structured result.");
   }
 
   if (result.error !== null) {
     const response = getResponse(result.response);
     const headers = getHeaders(result.headers);
 
-    throw new TreatyQueryError(getStatus(result), getErrorValue(result.error), {
-      cause: result.error,
-      ...(response === undefined ? {} : { response }),
-      ...(headers === undefined ? {} : { headers }),
-    });
+    throw applyTreatyQueryErrorMapper(
+      new TreatyQueryError(getStatus(result), getErrorValue(result.error), {
+        cause: result.error,
+        ...(response === undefined ? {} : { response }),
+        ...(headers === undefined ? {} : { headers }),
+      }),
+      mapError,
+    );
   }
 
+  if (result.status === 204 || result.status === 205) return null;
   return result.data === undefined ? null : result.data;
 }
 
@@ -107,14 +119,17 @@ export async function executeStaticGet(
   signal: AbortSignal,
   input?: { readonly query?: unknown },
   request?: GetTransportOptions,
+  mapError?: TreatyQueryErrorMapper,
 ): Promise<unknown> {
-  return executeTreatyRequest(() =>
-    method({
-      ...request,
-      ...(input?.query === undefined ? {} : { query: input.query }),
-      fetch: { ...request?.fetch, signal },
-      throwHttpError: false,
-    }),
+  return executeTreatyRequest(
+    () =>
+      method({
+        ...request,
+        ...(input?.query === undefined ? {} : { query: input.query }),
+        fetch: { ...request?.fetch, signal },
+        throwHttpError: false,
+      }),
+    mapError,
   );
 }
 
@@ -122,11 +137,14 @@ export async function executeMutation(
   method: MutationMethod,
   body: unknown,
   request?: MutationRequestOptions,
+  mapError?: TreatyQueryErrorMapper,
 ): Promise<unknown> {
-  return executeTreatyRequest(() =>
-    method(body, {
-      ...request,
-      throwHttpError: false,
-    }),
+  return executeTreatyRequest(
+    () =>
+      method(body, {
+        ...request,
+        throwHttpError: false,
+      }),
+    mapError,
   );
 }

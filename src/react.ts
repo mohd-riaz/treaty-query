@@ -41,10 +41,13 @@ import {
   type GetError,
   type GetInput,
   type GetOperationOptions,
+  type QueryError,
 } from "./static-helpers.js";
 import {
+  appendEscapedRouteProperty,
   appendRouteParameters,
   appendRouteProperty,
+  routeSegment,
   resolveRouteMethod,
   type RouteParameters,
   type RouteSegment,
@@ -53,6 +56,7 @@ import type {
   CacheScope,
   SerializableValue,
 } from "./types.js";
+import type { TreatyQueryErrorMapper } from "./error.js";
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any>;
 type Callable = (...arguments_: never[]) => unknown;
@@ -78,7 +82,7 @@ type RequiresGetInput<TMethod> = MethodOptions<TMethod> extends {
   : false;
 
 type HookRoutePropertyKey<TNode, TKey> = TKey extends string
-  ? TKey extends "~path"
+  ? TKey extends "~path" | "then" | "catch" | "finally"
     ? never
     : TKey extends "get"
       ? TKey
@@ -107,70 +111,98 @@ export type CacheScopeProvider = (
   props: CacheScopeProviderProps,
 ) => ReactElement;
 
-export interface RequiredUseQueryOperation<TMethod> {
+export interface RequiredUseQueryOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   useQuery<TData = GetData<TMethod>>(
     input: GetInput<TMethod>,
-    options?: GetOperationOptions<TMethod, TData>,
-  ): UseQueryResult<TData, GetError<TMethod>>;
+    options?: GetOperationOptions<TMethod, TData, TMappedError>,
+  ): UseQueryResult<TData, QueryError<TMethod, TMappedError>>;
 }
 
-export interface OptionalUseQueryOperation<TMethod> {
+export interface OptionalUseQueryOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   useQuery<TData = GetData<TMethod>>(
     input?: GetInput<TMethod>,
-    options?: GetOperationOptions<TMethod, TData>,
-  ): UseQueryResult<TData, GetError<TMethod>>;
+    options?: GetOperationOptions<TMethod, TData, TMappedError>,
+  ): UseQueryResult<TData, QueryError<TMethod, TMappedError>>;
 }
 
-export type UseQueryOperation<TMethod> =
+export type UseQueryOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> =
   RequiresGetInput<TMethod> extends true
-    ? RequiredUseQueryOperation<TMethod>
-    : OptionalUseQueryOperation<TMethod>;
+    ? RequiredUseQueryOperation<TMethod, TMappedError>
+    : OptionalUseQueryOperation<TMethod, TMappedError>;
 
-export interface RequiredUseMutationOperation<TMethod> {
+export interface RequiredUseMutationOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   useMutation<TOnMutateResult = unknown>(
-    options: MutationOperationOptions<TMethod, TOnMutateResult>,
+    options: MutationOperationOptions<TMethod, TOnMutateResult, TMappedError>,
   ): UseMutationResult<
     MutationData<TMethod>,
-    MutationError<TMethod>,
+    MutationError<TMethod, TMappedError>,
     MutationBody<TMethod>,
     TOnMutateResult
   >;
 }
 
-export interface OptionalUseMutationOperation<TMethod> {
+export interface OptionalUseMutationOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   useMutation<TOnMutateResult = unknown>(
-    options?: MutationOperationOptions<TMethod, TOnMutateResult>,
+    options?: MutationOperationOptions<TMethod, TOnMutateResult, TMappedError>,
   ): UseMutationResult<
     MutationData<TMethod>,
-    MutationError<TMethod>,
+    MutationError<TMethod, TMappedError>,
     MutationBody<TMethod>,
     TOnMutateResult
   >;
 }
 
-export type UseMutationOperation<TMethod> =
+export type UseMutationOperation<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> =
   {} extends MutationRequest<TMethod>
-    ? OptionalUseMutationOperation<TMethod>
-    : RequiredUseMutationOperation<TMethod>;
+    ? OptionalUseMutationOperation<TMethod, TMappedError>
+    : RequiredUseMutationOperation<TMethod, TMappedError>;
 
-type HookRouteProperties<TNode> = {
+type HookRouteProperties<TNode, TMappedError extends Error | undefined> = {
   readonly [TKey in keyof TNode as HookRoutePropertyKey<TNode, TKey>]:
     TKey extends "get"
-      ? UseQueryOperation<TNode[TKey]>
+      ? UseQueryOperation<TNode[TKey], TMappedError>
       : TKey extends "post" | "put" | "patch" | "delete"
-        ? UseMutationOperation<TNode[TKey]>
-      : TreatyQueryHooks<TNode[TKey]>;
+        ? UseMutationOperation<TNode[TKey], TMappedError>
+      : TreatyQueryHooks<TNode[TKey], TMappedError>;
 };
 
-type DynamicHookRoute<TNode> = TNode extends (
+type DynamicHookRoute<TNode, TMappedError extends Error | undefined> = TNode extends (
   parameters: infer TParameters,
 ) => infer TResult
-  ? (parameters: TParameters) => TreatyQueryHooks<TResult>
+  ? (parameters: TParameters) => TreatyQueryHooks<TResult, TMappedError>
   : unknown;
 
-export type TreatyQueryHooks<TNode> =
-  & DynamicHookRoute<TNode>
-  & HookRouteProperties<TNode>;
+type EscapedHookRoute<TNode, TMappedError extends Error | undefined> = {
+  readonly [routeSegment]: <TKey extends keyof TNode & string>(
+    segment: TKey,
+  ) => TreatyQueryHooks<TNode[TKey], TMappedError>;
+};
+
+export type TreatyQueryHooks<
+  TNode,
+  TMappedError extends Error | undefined = undefined,
+> =
+  & DynamicHookRoute<TNode, TMappedError>
+  & EscapedHookRoute<TNode, TMappedError>
+  & HookRouteProperties<TNode, TMappedError>;
 
 function isRouteParameters(value: unknown): value is RouteParameters {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -187,10 +219,29 @@ function createHookRouteProxy(
   cacheScopeContext: Context<CacheScope | undefined>,
   route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
+  mapError: TreatyQueryErrorMapper | undefined,
 ): unknown {
   return new Proxy(function treatyQueryHookRoute(): void {}, {
     get(_target, property): unknown {
-      if (property === "then") return undefined;
+      if (property === routeSegment) {
+        return (segment: string): unknown => {
+          if (segment.length === 0) {
+            throw new TypeError("An escaped Treaty route segment cannot be empty.");
+          }
+
+          return createHookRouteProxy(
+            clientContext,
+            cacheScopeContext,
+            appendEscapedRouteProperty(route, segment),
+            keyPrefix,
+            mapError,
+          );
+        };
+      }
+
+      if (property === "then" || property === "catch" || property === "finally") {
+        return undefined;
+      }
       if (typeof property !== "string") return undefined;
 
       if (property === "get") {
@@ -214,6 +265,7 @@ function createHookRouteProxy(
               route,
               keyPrefix,
               inheritedCacheScope,
+              mapError,
             );
             const runtimeInput = input as unknown as GetInput<unknown>;
             const runtimeOptions = options as unknown as
@@ -246,6 +298,7 @@ function createHookRouteProxy(
               property,
               route,
               keyPrefix,
+              mapError,
             ) as {
               mutationOptions(
                 runtimeOptions?: MutationOperationOptions<
@@ -272,6 +325,7 @@ function createHookRouteProxy(
         cacheScopeContext,
         appendRouteProperty(route, property),
         keyPrefix,
+        mapError,
       );
     },
     apply(_target, _thisArgument, argumentsList): unknown {
@@ -288,21 +342,29 @@ function createHookRouteProxy(
         cacheScopeContext,
         appendRouteParameters(route, parameters),
         keyPrefix,
+        mapError,
       );
     },
   });
 }
 
-export interface ReactTreatyQueryRuntime<TApp extends AnyElysia> {
+export interface ReactTreatyQueryRuntime<
+  TApp extends AnyElysia,
+  TMappedError extends Error | undefined = undefined,
+> {
   readonly Provider: TreatyQueryProvider<TApp>;
   readonly CacheScope: CacheScopeProvider;
-  readonly useUtils: () => TreatyQueryUtils<Treaty.Create<TApp>>;
-  readonly routes: TreatyQueryHooks<Treaty.Create<TApp>>;
+  readonly useUtils: () => TreatyQueryUtils<Treaty.Create<TApp>, TMappedError>;
+  readonly routes: TreatyQueryHooks<Treaty.Create<TApp>, TMappedError>;
 }
 
-export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
+export function createReactTreatyQueryRuntime<
+  TApp extends AnyElysia,
+  TMappedError extends Error | undefined = undefined,
+>(
   keyPrefix: readonly SerializableValue[] | undefined,
-): ReactTreatyQueryRuntime<TApp> {
+  mapError?: TreatyQueryErrorMapper,
+): ReactTreatyQueryRuntime<TApp, TMappedError> {
   const clientContext = createContext<unknown>(missingClient);
   const cacheScopeContext = createContext<CacheScope | undefined>(undefined);
 
@@ -326,7 +388,7 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
     );
   }
 
-  function useUtils(): TreatyQueryUtils<Treaty.Create<TApp>> {
+  function useUtils(): TreatyQueryUtils<Treaty.Create<TApp>, TMappedError> {
     const client = useContext(clientContext);
     const inheritedCacheScope = useContext(cacheScopeContext);
     const queryClient = useQueryClient();
@@ -337,11 +399,15 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
       );
     }
 
-    return createTreatyQueryUtils(
+    return createTreatyQueryUtils<
+      Treaty.Create<TApp>,
+      TMappedError
+    >(
       client as Treaty.Create<TApp>,
       queryClient,
       keyPrefix,
       inheritedCacheScope,
+      mapError,
     );
   }
 
@@ -354,7 +420,8 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
       cacheScopeContext,
       [],
       keyPrefix,
-    ) as TreatyQueryHooks<Treaty.Create<TApp>>,
+      mapError,
+    ) as TreatyQueryHooks<Treaty.Create<TApp>, TMappedError>,
   };
 }
 

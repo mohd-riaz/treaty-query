@@ -21,7 +21,12 @@ jobs:
       - run: bun test
       - run: bun run build
       - run: bun pm pack
+      - run: bun run scripts/audit-package.ts
       - run: bun install
         working-directory: tests/consumer
       - run: bun run check
         working-directory: tests/consumer
+      - run: bun install
+        working-directory: tests/consumer-lower
+      - run: bun run check
+        working-directory: tests/consumer-lower

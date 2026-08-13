@@ -90,3 +90,20 @@ queries can coexist in one request-local dehydrated state. A state object is
 never safe to reuse across requests merely because its keys are scoped: scope
 isolates cache lookup, while request-local QueryClients and correct response
 delivery provide the actual server isolation boundary.
+
+Phase 9 adds a symbol-based raw route segment. Normal properties remain lazy,
+while the escape records the original string distinctly so root `then`,
+`catch`, and `finally` routes can use Eden's dynamic-segment call form without
+making Treaty Query proxies thenable. The key builder serializes escaped and
+ordinary route names identically.
+
+The request normalizer handles all structured failures before applying an
+optional application error mapper. A mapper failure becomes
+`TreatyQueryErrorMappingError`, retaining the normalized Treaty error and the
+mapper cause. Successful 204/205 and undefined bodies normalize to `null` so a
+TanStack query function never resolves to undefined.
+
+The production bundle externalizes all peers. CI installs the packed tarball
+into both the project baseline and declared lower-bound consumer fixtures, and
+the package audit enforces the publish allowlist, runtime size ceiling, peer
+imports, and reviewed runtime-peer licenses.

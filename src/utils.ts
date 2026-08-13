@@ -17,9 +17,12 @@ import {
   createKeyPrefix,
   createRouteKey,
 } from "./query-key.js";
+import type { TreatyQueryErrorMapper } from "./error.js";
 import {
+  appendEscapedRouteProperty,
   appendRouteParameters,
   appendRouteProperty,
+  routeSegment,
   resolveRouteMethod,
   type RouteParameters,
   type RouteSegment,
@@ -30,6 +33,7 @@ import {
   type GetError,
   type GetInput,
   type GetOperationOptions,
+  type QueryError,
 } from "./static-helpers.js";
 import type {
   CacheScope,
@@ -73,17 +77,22 @@ export type TreatyInvalidateOptions = CacheUtilityScopeOptions &
   > &
   TanStackInvalidateOptions;
 
-export type TreatyEnsureDataOptions<TMethod> = CacheUtilityScopeOptions &
+export type TreatyEnsureDataOptions<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> = CacheUtilityScopeOptions &
   Omit<
     EnsureQueryDataOptions<
       GetData<TMethod>,
-      GetError<TMethod>,
+      QueryError<TMethod, TMappedError>,
       GetData<TMethod>,
       TreatyQueryKey
     >,
     "queryFn" | "queryKey"
   > & {
-    readonly request?: NonNullable<GetOperationOptions<TMethod>["request"]>;
+    readonly request?: NonNullable<
+      GetOperationOptions<TMethod, GetData<TMethod>, TMappedError>["request"]
+    >;
   };
 
 export type TreatySetDataOptions = CacheUtilityScopeOptions & SetDataOptions;
@@ -93,7 +102,10 @@ export interface TreatyRouteUtilities {
   invalidate(options?: TreatyInvalidateOptions): Promise<void>;
 }
 
-export interface RequiredGetUtilities<TMethod> {
+export interface RequiredGetUtilities<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   queryKey(
     input: GetInput<TMethod>,
     options?: CacheUtilityScopeOptions,
@@ -113,11 +125,14 @@ export interface RequiredGetUtilities<TMethod> {
   ): GetData<TMethod> | undefined;
   ensureData(
     input: GetInput<TMethod>,
-    options?: TreatyEnsureDataOptions<TMethod>,
+    options?: TreatyEnsureDataOptions<TMethod, TMappedError>,
   ): Promise<GetData<TMethod>>;
 }
 
-export interface OptionalGetUtilities<TMethod> {
+export interface OptionalGetUtilities<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> {
   queryKey(
     input?: GetInput<TMethod>,
     options?: CacheUtilityScopeOptions,
@@ -143,39 +158,62 @@ export interface OptionalGetUtilities<TMethod> {
   ): GetData<TMethod> | undefined;
   ensureData(
     input?: GetInput<TMethod>,
-    options?: TreatyEnsureDataOptions<TMethod>,
+    options?: TreatyEnsureDataOptions<TMethod, TMappedError>,
   ): Promise<GetData<TMethod>>;
 }
 
-export type GetUtilities<TMethod> = RequiresGetInput<TMethod> extends true
-  ? RequiredGetUtilities<TMethod>
-  : OptionalGetUtilities<TMethod>;
+export type GetUtilities<
+  TMethod,
+  TMappedError extends Error | undefined = undefined,
+> = RequiresGetInput<TMethod> extends true
+  ? RequiredGetUtilities<TMethod, TMappedError>
+  : OptionalGetUtilities<TMethod, TMappedError>;
 
 type UtilityRoutePropertyKey<TNode, TKey> = TKey extends string
-  ? TKey extends "~path" | UnsupportedTerminalMethod
+  ? TKey extends
+    | "~path"
+    | "then"
+    | "catch"
+    | "finally"
+    | "queryKey"
+    | "invalidate"
+    | UnsupportedTerminalMethod
     ? never
     : TKey
   : never;
 
-type UtilityRouteProperties<TNode> = {
+type UtilityRouteProperties<TNode, TMappedError extends Error | undefined> = {
   readonly [TKey in keyof TNode as UtilityRoutePropertyKey<TNode, TKey>]:
     TKey extends "get"
-      ? GetUtilities<TNode[TKey]>
-      : TreatyQueryRouteUtilitiesFor<TNode[TKey]>;
+      ? GetUtilities<TNode[TKey], TMappedError>
+      : TreatyQueryRouteUtilitiesFor<TNode[TKey], TMappedError>;
 };
 
-type DynamicUtilityRoute<TNode> = TNode extends (
+type DynamicUtilityRoute<TNode, TMappedError extends Error | undefined> = TNode extends (
   parameters: infer TParameters,
 ) => infer TResult
-  ? (parameters: TParameters) => TreatyQueryRouteUtilitiesFor<TResult>
+  ? (parameters: TParameters) => TreatyQueryRouteUtilitiesFor<TResult, TMappedError>
   : unknown;
 
-export type TreatyQueryRouteUtilitiesFor<TNode> =
-  & TreatyRouteUtilities
-  & DynamicUtilityRoute<TNode>
-  & UtilityRouteProperties<TNode>;
+type EscapedUtilityRoute<TNode, TMappedError extends Error | undefined> = {
+  readonly [routeSegment]: <TKey extends keyof TNode & string>(
+    segment: TKey,
+  ) => TreatyQueryRouteUtilitiesFor<TNode[TKey], TMappedError>;
+};
 
-export type TreatyQueryUtils<TNode> = TreatyQueryRouteUtilitiesFor<TNode> & {
+export type TreatyQueryRouteUtilitiesFor<
+  TNode,
+  TMappedError extends Error | undefined = undefined,
+> =
+  & TreatyRouteUtilities
+  & DynamicUtilityRoute<TNode, TMappedError>
+  & EscapedUtilityRoute<TNode, TMappedError>
+  & UtilityRouteProperties<TNode, TMappedError>;
+
+export type TreatyQueryUtils<
+  TNode,
+  TMappedError extends Error | undefined = undefined,
+> = TreatyQueryRouteUtilitiesFor<TNode, TMappedError> & {
   removeCacheScope(scope: CacheScope): void;
 };
 
@@ -230,6 +268,7 @@ function createGetUtilities(
   route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
   inheritedCacheScope: CacheScope | undefined,
+  mapError: TreatyQueryErrorMapper | undefined,
 ): unknown {
   const getMethod = resolveRouteMethod(client, route, "get");
 
@@ -311,6 +350,7 @@ function createGetUtilities(
         route,
         keyPrefix,
         inheritedCacheScope,
+        mapError,
       );
 
       return queryClient.ensureQueryData(
@@ -329,10 +369,30 @@ function createUtilityRouteProxy(
   route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
   inheritedCacheScope: CacheScope | undefined,
+  mapError: TreatyQueryErrorMapper | undefined,
 ): unknown {
   return new Proxy(function treatyQueryUtilityRoute(): void {}, {
     get(_target, property): unknown {
-      if (property === "then") return undefined;
+      if (property === routeSegment) {
+        return (segment: string): unknown => {
+          if (segment.length === 0) {
+            throw new TypeError("An escaped Treaty route segment cannot be empty.");
+          }
+
+          return createUtilityRouteProxy(
+            client,
+            queryClient,
+            appendEscapedRouteProperty(route, segment),
+            keyPrefix,
+            inheritedCacheScope,
+            mapError,
+          );
+        };
+      }
+
+      if (property === "then" || property === "catch" || property === "finally") {
+        return undefined;
+      }
       if (typeof property !== "string") return undefined;
 
       if (property === "queryKey") {
@@ -367,6 +427,7 @@ function createUtilityRouteProxy(
           route,
           keyPrefix,
           inheritedCacheScope,
+          mapError,
         );
       }
 
@@ -376,6 +437,7 @@ function createUtilityRouteProxy(
         appendRouteProperty(route, property),
         keyPrefix,
         inheritedCacheScope,
+        mapError,
       );
     },
     apply(_target, _thisArgument, argumentsList): unknown {
@@ -393,23 +455,29 @@ function createUtilityRouteProxy(
         appendRouteParameters(route, parameters),
         keyPrefix,
         inheritedCacheScope,
+        mapError,
       );
     },
   });
 }
 
-export function createTreatyQueryUtils<TClient>(
+export function createTreatyQueryUtils<
+  TClient,
+  TMappedError extends Error | undefined = undefined,
+>(
   client: TClient,
   queryClient: QueryClient,
   keyPrefix: readonly SerializableValue[] | undefined,
   inheritedCacheScope?: CacheScope,
-): TreatyQueryUtils<TClient> {
+  mapError?: TreatyQueryErrorMapper,
+): TreatyQueryUtils<TClient, TMappedError> {
   const routes = createUtilityRouteProxy(
     client,
     queryClient,
     [],
     keyPrefix,
     inheritedCacheScope,
+    mapError,
   );
 
   return new Proxy(routes as object, {
@@ -426,5 +494,5 @@ export function createTreatyQueryUtils<TClient>(
 
       return Reflect.get(target, property, receiver);
     },
-  }) as TreatyQueryUtils<TClient>;
+  }) as TreatyQueryUtils<TClient, TMappedError>;
 }
