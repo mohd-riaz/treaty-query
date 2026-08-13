@@ -37,7 +37,8 @@ const app = new Elysia()
   )
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
-  });
+  })
+  .get("/products/:id", ({ params }) => ({ id: params.id }));
 
 const client = treaty(app);
 const tq = createTreatyQuery<typeof app>();
@@ -58,7 +59,8 @@ const alternateApp = new Elysia()
   )
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
-  });
+  })
+  .get("/products/:id", ({ params }) => ({ id: params.id }));
 const alternateClient = treaty(alternateApp);
 
 GlobalRegistrator.register({
@@ -232,12 +234,32 @@ describe("React static GET useQuery", () => {
     await waitFor(() => expect(latestData).toEqual({ ok: false }));
   });
 
-  test("does not expose query-required routes before Phase 4", () => {
-    if (false) {
-      // @ts-expect-error Query input is intentionally deferred to Phase 4.
-      void tq.search.get;
+  test("executes required query input and dynamic path hooks", async () => {
+    let searchData: { term: string } | undefined;
+    let productData: { id: string } | undefined;
+
+    function Probe(): null {
+      searchData = tq.search.get.useQuery({
+        query: { term: "latte" },
+      }).data;
+      productData = tq.products({ id: 7 }).get.useQuery().data;
+      return null;
     }
 
-    expect(true).toBe(true);
+    render(
+      <Providers queryClient={createQueryClient()}>
+        <Probe />
+      </Providers>,
+    );
+
+    await waitFor(() => {
+      expect(searchData).toEqual({ term: "latte" });
+      expect(productData).toEqual({ id: "7" });
+    });
+
+    if (false) {
+      // @ts-expect-error The search hook requires semantic query input.
+      tq.search.get.useQuery();
+    }
   });
 });

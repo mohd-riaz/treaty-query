@@ -12,7 +12,7 @@ The implementation separates:
 - public error conversion;
 - framework-neutral option factories.
 
-Static, input-free GET option factories are available from
+GET option factories are available from
 `tq.createHelpers({ client })`. Property access records route segments without
 executing a request. TanStack starts the request through the generated
 `queryFn`, whose signal is forwarded to the official Treaty method.
@@ -23,8 +23,16 @@ override parents. `tq.health.get.useQuery()` reads that client, creates options
 through the same factory used by external helpers, and passes them to TanStack's
 native `useQuery`. There is no module-global client and no second request path.
 
-Query input and dynamic route parameters will extend the same proxies and key
-builder in later phases.
+Phase 4 replaces plain path strings with immutable route segments. Dynamic
+calls append a parameter segment at their exact route position; request
+execution replays those calls against the official Treaty client. Keys encode
+sorted parameter entries and normalize numeric URL parameters to strings.
+
+Semantic query input is passed to Treaty and stored as a plain value under the
+operation's `input` key. Transport-only headers and fetch options live under
+the caller's `request` option, are removed before passing options to TanStack,
+and never enter the key. TanStack's abort signal always replaces a transport
+signal.
 
 Cache scopes will be optional and used only when a response depends on hidden
 server context. Public endpoints, and routes whose visible path or input already

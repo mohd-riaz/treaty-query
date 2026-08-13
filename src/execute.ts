@@ -1,10 +1,15 @@
 import { TreatyQueryError } from "./error.js";
 
 export interface StaticGetRequestOptions {
-  readonly fetch: {
-    readonly signal: AbortSignal;
-  };
+  readonly query?: unknown;
+  readonly headers?: unknown;
+  readonly fetch: RequestInit;
   readonly throwHttpError: false;
+}
+
+export interface GetTransportOptions {
+  readonly headers?: unknown;
+  readonly fetch?: RequestInit;
 }
 
 export type StaticGetMethod = (
@@ -55,12 +60,16 @@ function getHeaders(value: unknown): HeadersInit | undefined {
 export async function executeStaticGet(
   method: StaticGetMethod,
   signal: AbortSignal,
+  input?: { readonly query?: unknown },
+  request?: GetTransportOptions,
 ): Promise<unknown> {
   let result: unknown;
 
   try {
     result = await method({
-      fetch: { signal },
+      ...request,
+      ...(input?.query === undefined ? {} : { query: input.query }),
+      fetch: { ...request?.fetch, signal },
       throwHttpError: false,
     });
   } catch (cause) {

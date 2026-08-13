@@ -2,12 +2,12 @@ import type { Treaty } from "@elysiajs/eden";
 import type { Elysia } from "elysia";
 
 import {
-  createStaticHelpers,
-  type StaticTreatyQueryHelpers,
+  createTreatyQueryHelpers,
+  type TreatyQueryHelpers,
 } from "./static-helpers.js";
 import {
   createReactTreatyQueryRuntime,
-  type StaticTreatyQueryHooks,
+  type TreatyQueryHooks,
   type TreatyQueryProvider,
 } from "./react.js";
 import type { SerializableValue } from "./types.js";
@@ -26,12 +26,12 @@ export interface TreatyQueryRoot<TApp extends AnyElysia> {
   readonly Provider: TreatyQueryProvider<TApp>;
   createHelpers(
     options: CreateHelpersOptions<TApp>,
-  ): StaticTreatyQueryHelpers<Treaty.Create<TApp>>;
+  ): TreatyQueryHelpers<Treaty.Create<TApp>>;
 }
 
 export type TreatyQueryClient<TApp extends AnyElysia> =
   & TreatyQueryRoot<TApp>
-  & StaticTreatyQueryHooks<Treaty.Create<TApp>>;
+  & TreatyQueryHooks<Treaty.Create<TApp>>;
 
 export function createTreatyQuery<TApp extends AnyElysia>(
   options: CreateTreatyQueryOptions = {},
@@ -41,8 +41,8 @@ export function createTreatyQuery<TApp extends AnyElysia>(
     Provider: reactRuntime.Provider,
     createHelpers(
       helperOptions: CreateHelpersOptions<TApp>,
-    ): StaticTreatyQueryHelpers<Treaty.Create<TApp>> {
-      return createStaticHelpers(helperOptions.client, options.keyPrefix);
+    ): TreatyQueryHelpers<Treaty.Create<TApp>> {
+      return createTreatyQueryHelpers(helperOptions.client, options.keyPrefix);
     },
   });
 

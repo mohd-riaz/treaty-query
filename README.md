@@ -2,9 +2,9 @@
 
 Type-safe TanStack Query bindings for Elysia Treaty clients.
 
-> **Status:** early development. Static, input-free GET option factories and
-> React `useQuery` hooks are implemented. Dynamic parameters, query input,
-> mutations, and cache scopes are not implemented yet.
+> **Status:** early development. GET option factories and React `useQuery`
+> hooks support semantic query input and dynamic path parameters. Mutations and
+> cache scopes are not implemented yet.
 
 ## React useQuery
 
@@ -32,7 +32,7 @@ export function Root() {
 }
 ```
 
-Static GET hooks infer their data and error types from the Treaty client:
+GET hooks infer their input, data, and error types from the Treaty client:
 
 ```tsx
 function Health() {
@@ -45,46 +45,82 @@ function Health() {
 }
 ```
 
-The first argument is currently `undefined` because semantic query input is a
-later phase. TanStack options are the second argument, matching the future
-input-bearing call shape. A hook must be rendered under the `Provider` from the
-same `createTreatyQuery()` instance. Nested providers use the nearest client.
+Semantic query input belongs in argument one and participates in the cache key:
 
-## Static GET query options
+```tsx
+const products = tq.products.get.useQuery({
+  query: { search: "coffee", page: 1 },
+});
+```
 
-Bind an existing official Treaty client, then create ordinary TanStack Query
-options:
+Dynamic route parameters use Treaty's natural call syntax:
+
+```tsx
+const product = tq.products({ id: productId }).get.useQuery();
+
+const order = tq.organizations({ organizationId })
+  .orders({ orderId })
+  .get.useQuery();
+```
+
+A hook must be rendered under the `Provider` from the same
+`createTreatyQuery()` instance. Nested providers use the nearest client.
+
+## GET query options
+
+Bind an existing official Treaty client to create ordinary TanStack Query
+options outside React:
 
 ```ts
-import { treaty } from "@elysiajs/eden";
-import { QueryClient } from "@tanstack/react-query";
-import type { App } from "./server";
-import { createTreatyQuery } from "treaty-query";
-
-const api = treaty<App>("https://api.example.com");
-const queryClient = new QueryClient();
-
 const helpers = tq.createHelpers({ client: api });
 
-const healthOptions = helpers.health.get.queryOptions({
+const healthOptions = helpers.health.get.queryOptions(undefined, {
   staleTime: 30_000,
 });
 
 const health = await queryClient.fetchQuery(healthOptions);
 ```
 
-Hooks and helpers share this exact option factory. Creating the options is
-lazy. The request starts only when TanStack invokes the generated `queryFn`.
-Successful Treaty data is unwrapped, the TanStack abort signal is forwarded,
-and failed results throw `TreatyQueryError`.
+Hooks and helpers share the exact key builder and execution path. Creating
+options is lazy. Successful Treaty data is unwrapped, the TanStack abort signal
+is forwarded, and failed results throw `TreatyQueryError`.
 
-Generated keys are namespaced and contain the static route and operation:
+Transport-only data belongs under `request` in argument two. It is forwarded
+to Treaty but excluded from the cache key:
+
+```ts
+const options = helpers.products.get.queryOptions(
+  { query: { page: 1 } },
+  {
+    request: {
+      headers: { "x-trace-id": traceId },
+      fetch: { credentials: "include" },
+    },
+    staleTime: 30_000,
+  },
+);
+```
+
+The adapter owns `fetch.signal` and replaces it with TanStack's signal. Never
+put tokens, cookies, authorization headers, credentials, or other secrets in
+semantic input, path parameters, key prefixes, or cache scopes.
+
+Conceptually, a query with nested path parameters and query input produces:
 
 ```ts
 [
   "treaty-query",
-  ["health"],
-  { kind: "query", method: "GET" },
+  [
+    "organizations",
+    ["$params", [["organizationId", "org-1"]]],
+    "orders",
+    ["$params", [["orderId", "order-9"]]],
+  ],
+  {
+    kind: "query",
+    method: "GET",
+    input: { query: { page: 1 } },
+  },
 ]
 ```
 
@@ -95,9 +131,6 @@ const tq = createTreatyQuery<App>({
   keyPrefix: ["admin-api"],
 });
 ```
-
-Only JSON-serializable values belong in a key prefix. Never use tokens,
-cookies, authorization headers, credentials, or other secrets.
 
 ## Planned cache scopes
 

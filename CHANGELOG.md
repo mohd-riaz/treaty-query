@@ -16,3 +16,7 @@ All notable changes to this project will be documented in this file.
 - Instance-local React `Provider` and static GET `useQuery` hooks.
 - Shared hook/helper execution and query-key behavior.
 - Nested-provider override and missing-provider diagnostics.
+- Typed semantic GET query input for helpers and React hooks.
+- Positional static and nested dynamic route-parameter calls.
+- Query keys containing normalized path parameters and semantic input.
+- Transport-only request headers and fetch options excluded from query keys.

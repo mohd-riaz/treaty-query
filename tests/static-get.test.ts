@@ -31,7 +31,19 @@ const app = new Elysia()
   )
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
-  });
+  })
+  .get("/products/:id", ({ params }) => ({ id: params.id }))
+  .get(
+    "/organizations/:organizationId/orders/:orderId",
+    ({ params, query }) => ({
+      organizationId: params.organizationId,
+      orderId: params.orderId,
+      page: query.page,
+    }),
+    {
+      query: t.Object({ page: t.Number() }),
+    },
+  );
 
 const client = treaty(app);
 const tq = createTreatyQuery<typeof app>();
@@ -59,7 +71,9 @@ describe("static GET query options", () => {
   test("builds an immutable, namespaced key without executing the request", () => {
     healthCalls = 0;
 
-    const options = helpers.health.get.queryOptions({ staleTime: 10_000 });
+    const options = helpers.health.get.queryOptions(undefined, {
+      staleTime: 10_000,
+    });
 
     expect(healthCalls).toBe(0);
     expect(options.queryKey as readonly unknown[]).toEqual([
@@ -99,7 +113,7 @@ describe("static GET query options", () => {
   });
 
   test("preserves select inference in caller options", () => {
-    const options = helpers.health.get.queryOptions({
+    const options = helpers.health.get.queryOptions(undefined, {
       select: (data) => (data.ok ? "up" : "down"),
     });
 
@@ -111,7 +125,9 @@ describe("static GET query options", () => {
 
   test("throws a structured TreatyQueryError for HTTP failures", async () => {
     const queryClient = createQueryClient();
-    const options = helpers.failure.get.queryOptions({ retry: false });
+    const options = helpers.failure.get.queryOptions(undefined, {
+      retry: false,
+    });
 
     try {
       await queryClient.fetchQuery(options);
@@ -164,7 +180,7 @@ describe("static GET query options", () => {
 
     try {
       await queryClient.fetchQuery(
-        remoteHelpers.health.get.queryOptions({ retry: false }),
+        remoteHelpers.health.get.queryOptions(undefined, { retry: false }),
       );
       throw new Error("Expected the transport request to fail.");
     } catch (error) {
@@ -193,12 +209,157 @@ describe("static GET query options", () => {
     ]);
   });
 
-  test("does not expose query-required GET methods before input support", () => {
-    if (false) {
-      // @ts-expect-error Query input is intentionally deferred to Phase 4.
-      void helpers.search.get;
-    }
+  test("includes required semantic query input in the key and request", async () => {
+    const options = helpers.search.get.queryOptions({
+      query: { term: "coffee" },
+    });
 
-    expect(true).toBe(true);
+    expect(options.queryKey as readonly unknown[]).toEqual([
+      "treaty-query",
+      ["search"],
+      {
+        kind: "query",
+        method: "GET",
+        input: { query: { term: "coffee" } },
+      },
+    ]);
+    expect(await createQueryClient().fetchQuery(options)).toEqual({
+      term: "coffee",
+    });
+
+    if (false) {
+      // @ts-expect-error The search route requires its declared query input.
+      helpers.search.get.queryOptions();
+      // @ts-expect-error The inferred query object requires term.
+      helpers.search.get.queryOptions({ query: {} });
+    }
+  });
+
+  test("keeps transport options out of keys and lets TanStack own the signal", async () => {
+    let forwardedSignal: AbortSignal | null | undefined;
+    let forwardedTrace: string | null = null;
+    let forwardedUrl = "";
+    const remoteClient = treaty<typeof app>("https://example.test", {
+      fetcher: (async (input, init) => {
+        forwardedUrl = String(input);
+        forwardedSignal = init?.signal;
+        forwardedTrace = new Headers(init?.headers).get("x-trace-id");
+        return Response.json({ term: "coffee" });
+      }) as typeof fetch,
+    });
+    const remoteHelpers = tq.createHelpers({ client: remoteClient });
+    const controller = new AbortController();
+    const options = remoteHelpers.search.get.queryOptions(
+      { query: { term: "coffee" } },
+      {
+        request: {
+          headers: { "x-trace-id": "trace-1" },
+          fetch: { credentials: "include" },
+        },
+        staleTime: 2_000,
+      },
+    );
+
+    expect(options.queryKey as readonly unknown[]).toEqual([
+      "treaty-query",
+      ["search"],
+      {
+        kind: "query",
+        method: "GET",
+        input: { query: { term: "coffee" } },
+      },
+    ]);
+    expect("request" in options).toBe(false);
+
+    await options.queryFn({
+      client: createQueryClient(),
+      meta: undefined,
+      queryKey: options.queryKey,
+      signal: controller.signal,
+    });
+
+    expect(forwardedUrl).toBe("https://example.test/search?term=coffee");
+    expect(forwardedTrace as string | null).toBe("trace-1");
+    expect(forwardedSignal).toBe(controller.signal);
+
+    if (false) {
+      remoteHelpers.search.get.queryOptions(
+        { query: { term: "coffee" } },
+        {
+          request: {
+            fetch: {
+              // @ts-expect-error TanStack owns the request AbortSignal.
+              signal: controller.signal,
+            },
+          },
+        },
+      );
+    }
+  });
+
+  test("uses semantic query input to separate cached data", async () => {
+    const queryClient = createQueryClient();
+    const coffee = helpers.search.get.queryOptions({
+      query: { term: "coffee" },
+    });
+    const tea = helpers.search.get.queryOptions({
+      query: { term: "tea" },
+    });
+
+    expect(coffee.queryKey).not.toEqual(tea.queryKey);
+    await queryClient.fetchQuery(coffee);
+    await queryClient.fetchQuery(tea);
+
+    expect(queryClient.getQueryData<{ term: string }>(coffee.queryKey)).toEqual({
+      term: "coffee",
+    });
+    expect(queryClient.getQueryData<{ term: string }>(tea.queryKey)).toEqual({
+      term: "tea",
+    });
+  });
+
+  test("captures and normalizes a numeric dynamic path parameter", async () => {
+    const options = helpers.products({ id: 42 }).get.queryOptions();
+
+    expect(options.queryKey as readonly unknown[]).toEqual([
+      "treaty-query",
+      ["products", ["$params", [["id", "42"]]]],
+      { kind: "query", method: "GET" },
+    ]);
+    expect(await createQueryClient().fetchQuery(options)).toEqual({ id: "42" });
+
+    if (false) {
+      // @ts-expect-error Dynamic route parameters are required.
+      void helpers.products().get;
+      // @ts-expect-error The inferred parameter name is id.
+      void helpers.products({ productId: "42" }).get;
+    }
+  });
+
+  test("preserves nested dynamic parameter positions", async () => {
+    const options = helpers
+      .organizations({ organizationId: "org-1" })
+      .orders({ orderId: "order-9" })
+      .get.queryOptions({ query: { page: 2 } });
+
+    expect(options.queryKey as readonly unknown[]).toEqual([
+      "treaty-query",
+      [
+        "organizations",
+        ["$params", [["organizationId", "org-1"]]],
+        "orders",
+        ["$params", [["orderId", "order-9"]]],
+      ],
+      {
+        kind: "query",
+        method: "GET",
+        input: { query: { page: 2 } },
+      },
+    ]);
+    expect(await createQueryClient().fetchQuery(options)).toEqual({
+      organizationId: "org-1",
+      orderId: "order-9",
+      page: 2,
+    });
   });
 });

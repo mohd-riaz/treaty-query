@@ -1,6 +1,10 @@
 import type { Treaty } from "@elysiajs/eden";
 import type { Elysia } from "elysia";
 import {
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import {
   createContext,
   createElement,
   useContext,
@@ -8,44 +12,60 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import {
-  useQuery,
-  type UseQueryResult,
-} from "@tanstack/react-query";
 
 import {
-  createStaticGetOperation,
-  type StaticGetData,
-  type StaticGetError,
+  createGetOperation,
+  type GetData,
+  type GetError,
+  type GetInput,
+  type GetOperationOptions,
 } from "./static-helpers.js";
+import {
+  appendRouteParameters,
+  appendRouteProperty,
+  resolveRouteMethod,
+  type RouteParameters,
+  type RouteSegment,
+} from "./route.js";
 import type {
   SerializableValue,
-  StaticGetQueryOptionsInput,
 } from "./types.js";
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any>;
 type Callable = (...arguments_: never[]) => unknown;
+type NonGetTerminalMethod =
+  | "post"
+  | "put"
+  | "patch"
+  | "delete"
+  | "options"
+  | "head"
+  | "connect"
+  | "subscribe";
 
 const missingClient = Symbol("treaty-query-missing-client");
 
-type AcceptsNoArguments<TMethod> = TMethod extends Callable
-  ? [] extends Parameters<TMethod>
-    ? true
-    : false
+type MethodOptions<TMethod> = TMethod extends (
+  options: infer TOptions,
+  ...arguments_: infer _TRest
+) => unknown
+  ? NonNullable<TOptions>
+  : never;
+
+type RequiresGetInput<TMethod> = MethodOptions<TMethod> extends {
+  query: unknown;
+}
+  ? true
   : false;
 
-type StaticHookKey<TNode, TKey> = TKey extends string
+type HookRoutePropertyKey<TNode, TKey> = TKey extends string
   ? TKey extends "~path"
     ? never
     : TKey extends "get"
-      ? AcceptsNoArguments<TNode extends Record<TKey, unknown> ? TNode[TKey] : never> extends true
-        ? TKey
-        : never
-      : TNode extends Record<TKey, unknown>
-        ? TNode[TKey] extends Callable
-          ? never
-          : TKey
-        : never
+      ? TKey
+      : TKey extends NonGetTerminalMethod
+        ? never
+        : TKey
   : never;
 
 export interface TreatyQueryProviderProps<TApp extends AnyElysia> {
@@ -57,44 +77,58 @@ export type TreatyQueryProvider<TApp extends AnyElysia> = (
   props: TreatyQueryProviderProps<TApp>,
 ) => ReactElement;
 
-export interface StaticUseQueryOperation<TMethod> {
-  useQuery<TData = StaticGetData<TMethod>>(
-    input?: undefined,
-    options?: StaticGetQueryOptionsInput<
-      StaticGetData<TMethod>,
-      StaticGetError<TMethod>,
-      TData
-    >,
-  ): UseQueryResult<TData, StaticGetError<TMethod>>;
+export interface RequiredUseQueryOperation<TMethod> {
+  useQuery<TData = GetData<TMethod>>(
+    input: GetInput<TMethod>,
+    options?: GetOperationOptions<TMethod, TData>,
+  ): UseQueryResult<TData, GetError<TMethod>>;
 }
 
-export type StaticTreatyQueryHooks<TNode> = {
-  readonly [TKey in keyof TNode as StaticHookKey<TNode, TKey>]:
+export interface OptionalUseQueryOperation<TMethod> {
+  useQuery<TData = GetData<TMethod>>(
+    input?: GetInput<TMethod>,
+    options?: GetOperationOptions<TMethod, TData>,
+  ): UseQueryResult<TData, GetError<TMethod>>;
+}
+
+export type UseQueryOperation<TMethod> =
+  RequiresGetInput<TMethod> extends true
+    ? RequiredUseQueryOperation<TMethod>
+    : OptionalUseQueryOperation<TMethod>;
+
+type HookRouteProperties<TNode> = {
+  readonly [TKey in keyof TNode as HookRoutePropertyKey<TNode, TKey>]:
     TKey extends "get"
-      ? StaticUseQueryOperation<TNode[TKey]>
-      : StaticTreatyQueryHooks<TNode[TKey]>;
+      ? UseQueryOperation<TNode[TKey]>
+      : TreatyQueryHooks<TNode[TKey]>;
 };
 
-function getClientMethod(
-  client: unknown,
-  path: readonly string[],
-  method: "get",
-): unknown {
-  let node = client;
+type DynamicHookRoute<TNode> = TNode extends (
+  parameters: infer TParameters,
+) => infer TResult
+  ? (parameters: TParameters) => TreatyQueryHooks<TResult>
+  : unknown;
 
-  for (const segment of path) {
-    node = (node as Record<string, unknown>)[segment];
+export type TreatyQueryHooks<TNode> =
+  & DynamicHookRoute<TNode>
+  & HookRouteProperties<TNode>;
+
+function isRouteParameters(value: unknown): value is RouteParameters {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
   }
 
-  return (node as Record<string, unknown>)[method];
+  return Object.values(value).every(
+    (entry) => typeof entry === "string" || typeof entry === "number",
+  );
 }
 
 function createHookRouteProxy(
   clientContext: Context<unknown>,
-  path: readonly string[],
+  route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
 ): unknown {
-  return new Proxy(Object.create(null) as object, {
+  return new Proxy(function treatyQueryHookRoute(): void {}, {
     get(_target, property): unknown {
       if (property === "then") return undefined;
       if (typeof property !== "string") return undefined;
@@ -102,8 +136,8 @@ function createHookRouteProxy(
       if (property === "get") {
         return Object.freeze({
           useQuery<TData>(
-            _input?: undefined,
-            options?: StaticGetQueryOptionsInput<unknown, Error, TData>,
+            input?: GetInput<unknown>,
+            options?: GetOperationOptions<unknown, TData>,
           ): UseQueryResult<TData, Error> {
             const client = useContext(clientContext);
 
@@ -113,22 +147,15 @@ function createHookRouteProxy(
               );
             }
 
-            const method = getClientMethod(client, path, "get");
-            const operation = createStaticGetOperation(
-              method,
-              path,
-              keyPrefix,
-            );
+            const method = resolveRouteMethod(client, route, "get");
+            const operation = createGetOperation(method, route, keyPrefix);
+            const runtimeInput = input as unknown as GetInput<unknown>;
             const runtimeOptions = options as unknown as
-              | StaticGetQueryOptionsInput<
-                  unknown,
-                  StaticGetError<unknown>,
-                  TData
-                >
+              | GetOperationOptions<unknown, TData>
               | undefined;
 
             return useQuery(
-              operation.queryOptions(runtimeOptions),
+              operation.queryOptions(runtimeInput, runtimeOptions),
             ) as UseQueryResult<TData, Error>;
           },
         });
@@ -136,7 +163,22 @@ function createHookRouteProxy(
 
       return createHookRouteProxy(
         clientContext,
-        [...path, property],
+        appendRouteProperty(route, property),
+        keyPrefix,
+      );
+    },
+    apply(_target, _thisArgument, argumentsList): unknown {
+      const parameters = argumentsList[0];
+
+      if (argumentsList.length !== 1 || !isRouteParameters(parameters)) {
+        throw new TypeError(
+          "Treaty dynamic routes require one string-or-number parameter object.",
+        );
+      }
+
+      return createHookRouteProxy(
+        clientContext,
+        appendRouteParameters(route, parameters),
         keyPrefix,
       );
     },
@@ -145,7 +187,7 @@ function createHookRouteProxy(
 
 export interface ReactTreatyQueryRuntime<TApp extends AnyElysia> {
   readonly Provider: TreatyQueryProvider<TApp>;
-  readonly routes: StaticTreatyQueryHooks<Treaty.Create<TApp>>;
+  readonly routes: TreatyQueryHooks<Treaty.Create<TApp>>;
 }
 
 export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
@@ -169,6 +211,11 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
       clientContext,
       [],
       keyPrefix,
-    ) as StaticTreatyQueryHooks<Treaty.Create<TApp>>,
+    ) as TreatyQueryHooks<Treaty.Create<TApp>>,
   };
 }
+
+/** @deprecated Use `UseQueryOperation`. */
+export type StaticUseQueryOperation<TMethod> = UseQueryOperation<TMethod>;
+/** @deprecated Use `TreatyQueryHooks`. */
+export type StaticTreatyQueryHooks<TNode> = TreatyQueryHooks<TNode>;

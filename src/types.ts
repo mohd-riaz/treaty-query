@@ -17,25 +17,39 @@ export type TreatyQueryPrefix = readonly [
   readonly SerializableValue[],
 ];
 
+export type TreatyQueryParameterEntry = readonly [string, string];
+
+export type TreatyQueryParameterSegment = readonly [
+  "$params",
+  readonly TreatyQueryParameterEntry[],
+];
+
+export type TreatyQueryPathSegment = string | TreatyQueryParameterSegment;
+
+export interface TreatyQuerySemanticInput {
+  readonly query: unknown;
+}
+
 export interface TreatyQueryOperation {
   readonly kind: "query";
   readonly method: "GET";
+  readonly input?: TreatyQuerySemanticInput;
 }
 
 export type TreatyQueryKey =
   | readonly [
       "treaty-query",
-      readonly string[],
+      readonly TreatyQueryPathSegment[],
       TreatyQueryOperation,
     ]
   | readonly [
       "treaty-query",
       TreatyQueryPrefix,
-      readonly string[],
+      readonly TreatyQueryPathSegment[],
       TreatyQueryOperation,
     ];
 
-export type StaticGetQueryOptionsInput<
+export type GetQueryOptionsInput<
   TQueryFnData,
   TError,
   TData = TQueryFnData,
@@ -44,11 +58,25 @@ export type StaticGetQueryOptionsInput<
   "queryFn" | "queryKey"
 >;
 
+export type GetQueryOptions<
+  TQueryFnData,
+  TError,
+  TData = TQueryFnData,
+> = GetQueryOptionsInput<TQueryFnData, TError, TData> & {
+  readonly queryKey: DataTag<TreatyQueryKey, TQueryFnData, TError>;
+  readonly queryFn: QueryFunction<TQueryFnData, TreatyQueryKey>;
+};
+
+/** @deprecated Use `GetQueryOptionsInput`. */
+export type StaticGetQueryOptionsInput<
+  TQueryFnData,
+  TError,
+  TData = TQueryFnData,
+> = GetQueryOptionsInput<TQueryFnData, TError, TData>;
+
+/** @deprecated Use `GetQueryOptions`. */
 export type StaticGetQueryOptions<
   TQueryFnData,
   TError,
   TData = TQueryFnData,
-> = StaticGetQueryOptionsInput<TQueryFnData, TError, TData> & {
-  readonly queryKey: DataTag<TreatyQueryKey, TQueryFnData, TError>;
-  readonly queryFn: QueryFunction<TQueryFnData, TreatyQueryKey>;
-};
+> = GetQueryOptions<TQueryFnData, TError, TData>;
