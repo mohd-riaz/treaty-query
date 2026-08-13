@@ -3,8 +3,8 @@
 Type-safe TanStack Query bindings for Elysia Treaty clients.
 
 > **Status:** early development. GET option factories, React `useQuery`,
-> dynamic path parameters, mutations, and optional cache scopes are
-> implemented. Broader typed cache utilities are still planned.
+> dynamic path parameters, mutations, optional cache scopes, and essential
+> typed cache utilities are implemented.
 
 ## React useQuery
 
@@ -217,6 +217,69 @@ or other secrets as a cache scope. If a visible route parameter or query input
 already separates the data, keep the query outside `CacheScope` or use
 `cacheScope: false`; the library does not guess whether identifiers are
 duplicated.
+
+## Typed cache utilities
+
+`tq.useUtils()` returns a route-aware proxy bound to the nearest Treaty client,
+cache scope, and TanStack `QueryClient`:
+
+```tsx
+const utils = tq.useUtils();
+
+await utils.products.invalidate();
+await utils.products({ id: productId }).get.invalidate();
+
+const cached = utils.products({ id: productId }).get.getData();
+
+utils.products({ id: productId }).get.setData((previous) =>
+  previous === undefined
+    ? previous
+    : { ...previous, name: "Updated" },
+);
+
+const product = await utils.products({ id: productId }).get.ensureData();
+```
+
+Route-level `invalidate()` matches that route and its descendants. GET-level
+`invalidate()` matches every semantic input for that endpoint. Both preserve
+the inherited scope, so invalidating one user's products cannot invalidate
+another user's entries. Pass `cacheScope: false` or another scope value to
+override inheritance:
+
+```ts
+await utils.countries.invalidate({ cacheScope: false });
+```
+
+`getData`, `setData`, and `ensureData` address an exact GET key. Required query
+input remains required and typed:
+
+```ts
+const coffee = utils.search.get.getData({
+  query: { term: "coffee" },
+});
+
+utils.search.get.setData(
+  { query: { term: "coffee" } },
+  { term: "cached coffee" },
+);
+```
+
+For an input-free GET, `setData(updater)` is the concise form. Supply
+`undefined` explicitly when that operation also needs scope or `updatedAt`
+options: `setData(undefined, updater, options)`.
+
+`ensureData` executes the same Treaty request function as `useQuery` when the
+exact entry is missing or stale. It accepts query/request options in its second
+argument. `queryKey()` is also available on routes and GET operations for code
+that needs the canonical prefix or exact key:
+
+```ts
+const productsPrefix = utils.products.queryKey();
+const productKey = utils.products({ id: productId }).get.queryKey();
+```
+
+These utilities must be called from a React component or custom hook beneath
+both this `tq.Provider` and TanStack's `QueryClientProvider`.
 
 ## Mutations
 

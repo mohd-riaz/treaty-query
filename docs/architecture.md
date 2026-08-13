@@ -62,3 +62,18 @@ the key has this library's namespace, this instance's exact optional prefix,
 and the complete stable scope value. Public entries, other scopes, mutation
 entries, differently prefixed instances, and unrelated TanStack queries are
 not affected.
+
+Phase 7 turns `useUtils()` into a typed route proxy while retaining the exact
+root cleanup operation. Route and GET key factories call the same immutable
+path, prefix, operation, and cache-scope builders used by query options.
+
+Route invalidation uses a canonical key ending in the route-path array; an
+empty or partial nested path therefore uses TanStack's normal partial-key
+matching without crossing scope or application-prefix positions. GET
+invalidation appends the base `{ kind: "query", method: "GET" }` operation and
+therefore matches all semantic inputs for only that endpoint. Exact `getData`,
+`setData`, and `ensureData` operations use the complete GET key.
+
+The utility proxy is created inside `useUtils()` from the nearest client,
+nearest cache scope, and existing TanStack `QueryClient`. It neither stores
+runtime state globally nor creates another query client or request path.

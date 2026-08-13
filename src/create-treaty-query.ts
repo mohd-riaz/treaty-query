@@ -11,8 +11,8 @@ import {
   type CacheScopeProvider,
   type TreatyQueryHooks,
   type TreatyQueryProvider,
-  type TreatyQueryUtils,
 } from "./react.js";
+import type { TreatyQueryUtils } from "./utils.js";
 import type { CacheScope, SerializableValue } from "./types.js";
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any>;
@@ -29,7 +29,7 @@ export interface CreateHelpersOptions<TApp extends AnyElysia> {
 export interface TreatyQueryRoot<TApp extends AnyElysia> {
   readonly Provider: TreatyQueryProvider<TApp>;
   readonly CacheScope: CacheScopeProvider;
-  useUtils(): TreatyQueryUtils;
+  useUtils(): TreatyQueryUtils<Treaty.Create<TApp>>;
   createHelpers(
     options: CreateHelpersOptions<TApp>,
   ): TreatyQueryHelpers<Treaty.Create<TApp>>;

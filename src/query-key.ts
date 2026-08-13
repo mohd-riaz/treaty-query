@@ -12,6 +12,7 @@ import type {
   TreatyQueryParameterSegment,
   TreatyQueryPathSegment,
   TreatyQueryPrefix,
+  TreatyQueryRouteKey,
   TreatyQuerySemanticInput,
 } from "./types.js";
 
@@ -45,6 +46,36 @@ function createPathKey(
         : createParameterKey(segment.value),
     ),
   );
+}
+
+export function createRouteKey(
+  route: readonly RouteSegment[],
+  keyPrefix: readonly SerializableValue[] | undefined,
+  cacheScope: CacheScope | undefined,
+): TreatyQueryRouteKey {
+  const path = createPathKey(route);
+  const prefix = createKeyPrefix(keyPrefix);
+  const scope = cacheScope === undefined
+    ? undefined
+    : createCacheScopeMarker(cacheScope);
+
+  if (prefix === undefined) {
+    return scope === undefined
+      ? Object.freeze([namespace, path])
+      : Object.freeze([namespace, scope, path]);
+  }
+
+  return scope === undefined
+    ? Object.freeze([namespace, prefix, path])
+    : Object.freeze([namespace, prefix, scope, path]);
+}
+
+export function createGetMethodKey(
+  route: readonly RouteSegment[],
+  keyPrefix: readonly SerializableValue[] | undefined,
+  cacheScope: CacheScope | undefined,
+): TreatyQueryKey {
+  return createGetKey(route, undefined, keyPrefix, cacheScope);
 }
 
 function createOperation(

@@ -415,7 +415,7 @@ describe("React static GET useQuery", () => {
       cacheScope: ["user", { id: "previous" }] as const,
     }).queryKey;
     const unrelated = ["another-library", "health"] as const;
-    let utils: TreatyQueryUtils | undefined;
+    let utils: TreatyQueryUtils<typeof client> | undefined;
 
     queryClient.setQueryData(previous as QueryKey, "previous");
     queryClient.setQueryData(current as QueryKey, "current");
@@ -447,5 +447,163 @@ describe("React static GET useQuery", () => {
       "other-prefix",
     );
     expect(queryClient.getQueryData<string>(unrelated)).toBe("unrelated");
+  });
+
+  test("provides typed exact cache reads, writes, keys, and ensureData", async () => {
+    const queryClient = createQueryClient();
+    let utils: TreatyQueryUtils<typeof client> | undefined;
+
+    function Probe(): null {
+      utils = tq.useUtils();
+      return null;
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <tq.Provider client={client}>
+          <tq.CacheScope value="user-a">
+            <Probe />
+          </tq.CacheScope>
+        </tq.Provider>
+      </QueryClientProvider>,
+    );
+
+    if (utils === undefined) throw new Error("Expected utilities.");
+
+    const helperKey = tq
+      .createHelpers({ client, cacheScope: "user-a" })
+      .products({ id: 7 })
+      .get.queryOptions().queryKey;
+    expect(utils.products({ id: 7 }).get.queryKey()).toEqual(helperKey);
+
+    const written = utils.products({ id: 7 }).get.setData((previous) => ({
+      id: previous?.id ?? "7",
+    }));
+    expect(written).toEqual({ id: "7" });
+
+    const product = utils.products({ id: 7 }).get.getData();
+    const typedProduct: { id: string } | undefined = product;
+    expect(typedProduct).toEqual({ id: "7" });
+
+    utils.search.get.setData(
+      { query: { term: "coffee" } },
+      { term: "cached-coffee" },
+    );
+    expect(
+      utils.search.get.getData({ query: { term: "coffee" } }),
+    ).toEqual({ term: "cached-coffee" });
+
+    utils.products({ id: 7 }).get.setData(
+      undefined,
+      { id: "public-7" },
+      { cacheScope: false },
+    );
+    expect(
+      utils.products({ id: 7 }).get.getData(undefined, {
+        cacheScope: false,
+      }),
+    ).toEqual({ id: "public-7" });
+    expect(utils.products({ id: 7 }).get.getData()).toEqual({ id: "7" });
+
+    healthCalls = 0;
+    const ensured = await utils.health.get.ensureData(undefined, {
+      staleTime: 10_000,
+    });
+    expect(ensured).toEqual({ ok: true });
+    expect(healthCalls).toBe(1);
+    expect(
+      queryClient.getQueryData<{ ok: boolean }>(
+        tq.createHelpers({ client, cacheScope: "user-a" })
+          .health.get.queryOptions().queryKey,
+      ),
+    ).toEqual({ ok: true });
+
+    if (false) {
+      // @ts-expect-error Required semantic query input cannot be omitted.
+      utils.search.get.getData();
+      // @ts-expect-error The updater must preserve the endpoint data type.
+      utils.products({ id: 7 }).get.setData(() => ({ missing: true }));
+      // @ts-expect-error Dynamic route parameters retain their Treaty type.
+      utils.products({ productId: 7 }).get.getData();
+    }
+  });
+
+  test("invalidates route and GET prefixes only within the inherited scope", async () => {
+    const queryClient = createQueryClient();
+    let utils: TreatyQueryUtils<typeof client> | undefined;
+
+    function Probe(): null {
+      utils = tq.useUtils();
+      return null;
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <tq.Provider client={client}>
+          <tq.CacheScope value="user-a">
+            <Probe />
+          </tq.CacheScope>
+        </tq.Provider>
+      </QueryClientProvider>,
+    );
+
+    if (utils === undefined) throw new Error("Expected utilities.");
+
+    const helpers = tq.createHelpers({ client });
+    const productA1 = helpers.products({ id: 1 }).get.queryOptions(undefined, {
+      cacheScope: "user-a",
+    }).queryKey;
+    const productA2 = helpers.products({ id: 2 }).get.queryOptions(undefined, {
+      cacheScope: "user-a",
+    }).queryKey;
+    const productB = helpers.products({ id: 1 }).get.queryOptions(undefined, {
+      cacheScope: "user-b",
+    }).queryKey;
+    const publicProduct = helpers.products({ id: 1 }).get.queryOptions().queryKey;
+    const coffee = helpers.search.get.queryOptions(
+      { query: { term: "coffee" } },
+      { cacheScope: "user-a" },
+    ).queryKey;
+    const tea = helpers.search.get.queryOptions(
+      { query: { term: "tea" } },
+      { cacheScope: "user-a" },
+    ).queryKey;
+
+    for (const key of [productA1, productA2, productB, publicProduct, coffee, tea]) {
+      queryClient.setQueryData(key as QueryKey, "seeded");
+    }
+
+    expect(utils.products.queryKey()).toEqual([
+      "treaty-query",
+      ["scope", "user-a"],
+      ["products"],
+    ]);
+
+    await act(async () => {
+      await utils?.products.invalidate({ refetchType: "none" });
+    });
+
+    expect(queryClient.getQueryState(productA1)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(productA2)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(productB)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(publicProduct)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(coffee)?.isInvalidated).toBe(false);
+
+    await act(async () => {
+      await utils?.products.invalidate({
+        cacheScope: false,
+        refetchType: "none",
+      });
+    });
+
+    expect(queryClient.getQueryState(publicProduct)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(productB)?.isInvalidated).toBe(false);
+
+    await act(async () => {
+      await utils?.search.get.invalidate({ refetchType: "none" });
+    });
+
+    expect(queryClient.getQueryState(coffee)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(tea)?.isInvalidated).toBe(true);
   });
 });

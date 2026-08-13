@@ -35,6 +35,28 @@ export type TreatyQueryParameterSegment = readonly [
 
 export type TreatyQueryPathSegment = string | TreatyQueryParameterSegment;
 
+export type TreatyQueryRouteKey =
+  | readonly [
+      "treaty-query",
+      readonly TreatyQueryPathSegment[],
+    ]
+  | readonly [
+      "treaty-query",
+      TreatyQueryScope,
+      readonly TreatyQueryPathSegment[],
+    ]
+  | readonly [
+      "treaty-query",
+      TreatyQueryPrefix,
+      readonly TreatyQueryPathSegment[],
+    ]
+  | readonly [
+      "treaty-query",
+      TreatyQueryPrefix,
+      TreatyQueryScope,
+      readonly TreatyQueryPathSegment[],
+    ];
+
 export interface TreatyQuerySemanticInput {
   readonly query: unknown;
 }

@@ -80,4 +80,19 @@ if (
   throw new Error("The packed treaty-query React API is invalid.");
 }
 
-console.log(`Consumed treaty-query ${version} Phase 6 API`);
+if (false) {
+  const utils = tq.useUtils();
+  const productKey = utils.products({ id: 42 }).get.queryKey();
+  const cachedProduct = utils.products({ id: 42 }).get.getData();
+  const typedProduct: { id: string } | undefined = cachedProduct;
+
+  utils.products({ id: 42 }).get.setData((previous) => previous);
+  await utils.products.invalidate({ refetchType: "none" });
+  await utils.products({ id: 42 }).get.invalidate();
+  await utils.products({ id: 42 }).get.ensureData();
+
+  void productKey;
+  void typedProduct;
+}
+
+console.log(`Consumed treaty-query ${version} Phase 7 API`);

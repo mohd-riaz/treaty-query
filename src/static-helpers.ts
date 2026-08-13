@@ -6,6 +6,7 @@ import {
   type StaticGetMethod,
 } from "./execute.js";
 import { TreatyQueryError } from "./error.js";
+import { resolveCacheScope } from "./cache-scope.js";
 import { createGetKey } from "./query-key.js";
 import {
   createMutationOperation,
@@ -193,14 +194,15 @@ export function createGetOperation<TMethod>(
     ): GetQueryOptions<GetData<TMethod>, GetError<TMethod>, TData> {
       const semanticInput = input as TreatyQuerySemanticInput | undefined;
       const { request, cacheScope, ...tanstackOptions } = options;
-      const resolvedCacheScope = cacheScope === false
-        ? undefined
-        : cacheScope ?? inheritedCacheScope;
+      const resolvedScope = resolveCacheScope(
+        inheritedCacheScope,
+        cacheScope,
+      );
       const queryKey = createGetKey(
         route,
         semanticInput,
         keyPrefix,
-        resolvedCacheScope,
+        resolvedScope,
       );
       const queryFn = async (
         context: QueryFunctionContext<TreatyQueryKey>,

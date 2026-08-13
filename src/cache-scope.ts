@@ -90,6 +90,15 @@ export function createCacheScopeMarker(value: CacheScope): TreatyQueryScope {
   return Object.freeze(["scope", normalizeCacheScope(value)]);
 }
 
+export function resolveCacheScope(
+  inheritedCacheScope: CacheScope | undefined,
+  cacheScope: CacheScope | false | undefined,
+): CacheScope | undefined {
+  return cacheScope === false
+    ? undefined
+    : cacheScope ?? inheritedCacheScope;
+}
+
 function isPrefixMarker(
   value: unknown,
   expected: TreatyQueryPrefix,

@@ -48,10 +48,21 @@ export type {
   TreatyQueryHooks,
   TreatyQueryProvider,
   TreatyQueryProviderProps,
-  TreatyQueryUtils,
   UseMutationOperation,
   UseQueryOperation,
 } from "./react.js";
+export type {
+  CacheUtilityScopeOptions,
+  GetUtilities,
+  OptionalGetUtilities,
+  RequiredGetUtilities,
+  TreatyEnsureDataOptions,
+  TreatyInvalidateOptions,
+  TreatyQueryRouteUtilitiesFor,
+  TreatyQueryUtils,
+  TreatyRouteUtilities,
+  TreatySetDataOptions,
+} from "./utils.js";
 export type {
   CacheScope,
   GetQueryOptions,
@@ -70,6 +81,7 @@ export type {
   TreatyQueryParameterSegment,
   TreatyQueryPathSegment,
   TreatyQueryPrefix,
+  TreatyQueryRouteKey,
   TreatyQueryScope,
   TreatyQuerySemanticInput,
 } from "./types.js";

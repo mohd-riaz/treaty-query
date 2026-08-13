@@ -18,9 +18,11 @@ import {
 
 import {
   normalizeCacheScope,
-  removeCacheScopeQueries,
 } from "./cache-scope.js";
-import { createKeyPrefix } from "./query-key.js";
+import {
+  createTreatyQueryUtils,
+  type TreatyQueryUtils,
+} from "./utils.js";
 
 import {
   createMutationOperation,
@@ -104,10 +106,6 @@ export interface CacheScopeProviderProps {
 export type CacheScopeProvider = (
   props: CacheScopeProviderProps,
 ) => ReactElement;
-
-export interface TreatyQueryUtils {
-  removeCacheScope(scope: CacheScope): void;
-}
 
 export interface RequiredUseQueryOperation<TMethod> {
   useQuery<TData = GetData<TMethod>>(
@@ -298,7 +296,7 @@ function createHookRouteProxy(
 export interface ReactTreatyQueryRuntime<TApp extends AnyElysia> {
   readonly Provider: TreatyQueryProvider<TApp>;
   readonly CacheScope: CacheScopeProvider;
-  readonly useUtils: () => TreatyQueryUtils;
+  readonly useUtils: () => TreatyQueryUtils<Treaty.Create<TApp>>;
   readonly routes: TreatyQueryHooks<Treaty.Create<TApp>>;
 }
 
@@ -307,7 +305,6 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
 ): ReactTreatyQueryRuntime<TApp> {
   const clientContext = createContext<unknown>(missingClient);
   const cacheScopeContext = createContext<CacheScope | undefined>(undefined);
-  const prefix = createKeyPrefix(keyPrefix);
 
   function Provider(
     props: TreatyQueryProviderProps<TApp>,
@@ -329,8 +326,9 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
     );
   }
 
-  function useUtils(): TreatyQueryUtils {
+  function useUtils(): TreatyQueryUtils<Treaty.Create<TApp>> {
     const client = useContext(clientContext);
+    const inheritedCacheScope = useContext(cacheScopeContext);
     const queryClient = useQueryClient();
 
     if (client === missingClient) {
@@ -339,11 +337,12 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
       );
     }
 
-    return {
-      removeCacheScope(scope: CacheScope): void {
-        removeCacheScopeQueries(queryClient, prefix, scope);
-      },
-    };
+    return createTreatyQueryUtils(
+      client as Treaty.Create<TApp>,
+      queryClient,
+      keyPrefix,
+      inheritedCacheScope,
+    );
   }
 
   return {
