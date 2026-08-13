@@ -1,4 +1,16 @@
-const archiveName = "treaty-query-0.1.0.tgz";
+const packageMetadata: unknown = await Bun.file("package.json").json();
+if (
+  typeof packageMetadata !== "object" ||
+  packageMetadata === null ||
+  !("name" in packageMetadata) ||
+  packageMetadata.name !== "treaty-query" ||
+  !("version" in packageMetadata) ||
+  typeof packageMetadata.version !== "string"
+) {
+  throw new Error("package.json must declare the treaty-query name and a version.");
+}
+
+const archiveName = `${packageMetadata.name}-${packageMetadata.version}.tgz`;
 const archive = Bun.file(archiveName);
 
 if (!(await archive.exists())) {

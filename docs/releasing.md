@@ -19,10 +19,12 @@ bun test
 bun run audit:package
 ```
 
-`git status --short` must print nothing. Inspect the exact candidate archive:
+`git status --short` must print nothing. Read the version from `package.json`
+and inspect the exact candidate archive:
 
 ```sh
-tar -tf treaty-query-0.1.0.tgz
+VERSION="$(bun -p "require('./package.json').version")"
+tar -tf "treaty-query-$VERSION.tgz"
 ```
 
 Then verify both isolated consumers against that archive:
@@ -59,12 +61,14 @@ git log -1 --oneline
 bun publish --access public
 ```
 
-Only after the registry confirms `0.1.0`, create and push the matching tag:
+Only after the registry confirms the intended version, create and push the
+matching tag:
 
 ```sh
-git tag -a v0.1.0 -m "treaty-query v0.1.0"
+VERSION="$(bun -p "require('./package.json').version")"
+git tag -a "v$VERSION" -m "treaty-query v$VERSION"
 git push origin main
-git push origin v0.1.0
+git push origin "v$VERSION"
 ```
 
 Do not pass authentication tokens, cookies, or long-lived credentials in shell

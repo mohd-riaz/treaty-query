@@ -1,7 +1,7 @@
 # Compatibility
 
 The automated package-consumer fixtures install the packed tarball and use only
-its public export. The following combinations are verified for `0.1.0`:
+its public export. The following combinations are verified for `0.1.1`:
 
 | Fixture | Elysia | Eden Treaty | TanStack React Query | React |
 | --- | --- | --- | --- | --- |

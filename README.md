@@ -3,13 +3,34 @@
 tRPC-style TanStack Query DX for Elysia Treaty, using the official client with
 no code generation or custom transport.
 
-> **Status:** `0.1.0` is the initial public release and is available on
+> **Status:** Treaty Query is available on
 > [npm](https://www.npmjs.com/package/treaty-query). The project is still in
 > early `0.x` development, so review the changelog when upgrading.
 
 ## Installation
 
-Install Treaty Query alongside its peer dependencies:
+Install Treaty Query alongside its peer dependencies with your preferred
+package manager.
+
+Using npm:
+
+```sh
+npm install treaty-query @elysiajs/eden @tanstack/react-query elysia react
+```
+
+Using pnpm:
+
+```sh
+pnpm add treaty-query @elysiajs/eden @tanstack/react-query elysia react
+```
+
+Using Yarn:
+
+```sh
+yarn add treaty-query @elysiajs/eden @tanstack/react-query elysia react
+```
+
+Using Bun:
 
 ```sh
 bun add treaty-query @elysiajs/eden @tanstack/react-query elysia react

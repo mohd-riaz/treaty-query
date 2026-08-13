@@ -90,4 +90,4 @@ export type {
   TreatyQuerySemanticInput,
 } from "./types.js";
 
-export const version: "0.1.0" = "0.1.0";
+export const version: "0.1.1" = "0.1.1";

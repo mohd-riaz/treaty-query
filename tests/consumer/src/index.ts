@@ -71,7 +71,7 @@ if (
 }
 
 if (
-  version !== "0.1.0" ||
+  version !== "0.1.1" ||
   productOptions.queryKey[0] !== "treaty-query" ||
   JSON.stringify(scopedHealthOptions.queryKey[1]) !==
     JSON.stringify(["scope", ["user", { id: "consumer-user" }]])

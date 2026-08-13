@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.1.1 - 2026-08-14
+
+### Changed
+
+- Corrected the npm-facing release status.
+- Added installation commands for npm, pnpm, Yarn, and Bun.
+- Clarified the tRPC-style developer-experience positioning without implying
+  runtime compatibility or affiliation.
+- Improved package description and keywords for discovery.
+
 ## 0.1.0 - 2026-08-14
 
 ### Added
