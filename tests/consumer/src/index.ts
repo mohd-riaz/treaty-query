@@ -1,5 +1,9 @@
 import { treaty } from "@elysiajs/eden";
-import { QueryClient } from "@tanstack/react-query";
+import {
+  dehydrate,
+  hydrate,
+  QueryClient,
+} from "@tanstack/react-query";
 import { Elysia, t } from "elysia";
 import {
   createTreatyQuery,
@@ -46,6 +50,9 @@ const created = await mutationOptions.mutationFn(
     mutationKey: mutationOptions.mutationKey,
   },
 );
+const dehydratedState = dehydrate(queryClient);
+const hydratedQueryClient = new QueryClient();
+hydrate(hydratedQueryClient, dehydratedState);
 
 if (
   !health.ok ||
@@ -54,6 +61,13 @@ if (
   created.id !== "created-1"
 ) {
   throw new Error("The packed treaty-query package returned invalid data.");
+}
+
+if (
+  hydratedQueryClient.getQueryData<{ id: string }>(productOptions.queryKey)?.id !==
+    "42"
+) {
+  throw new Error("The packed treaty-query hydration key was unstable.");
 }
 
 if (
@@ -95,4 +109,4 @@ if (false) {
   void typedProduct;
 }
 
-console.log(`Consumed treaty-query ${version} Phase 7 API`);
+console.log(`Consumed treaty-query ${version} Phase 8 API`);

@@ -77,3 +77,16 @@ therefore matches all semantic inputs for only that endpoint. Exact `getData`,
 The utility proxy is created inside `useUtils()` from the nearest client,
 nearest cache scope, and existing TanStack `QueryClient`. It neither stores
 runtime state globally nor creates another query client or request path.
+
+Phase 8 validates the existing `createHelpers({ client, cacheScope? })`
+boundary outside React. TanStack Router loaders pass its ordinary query option
+objects to a QueryClient. SSR handlers create a Treaty client, helpers, and a
+QueryClient per request, prefetch or ensure queries, then use TanStack's native
+dehydration state without a Treaty Query-specific serialization format.
+
+Server and browser helpers independently reproduce identical keys when given
+the same prefix, scope, route parameters, and semantic input. Public and scoped
+queries can coexist in one request-local dehydrated state. A state object is
+never safe to reuse across requests merely because its keys are scoped: scope
+isolates cache lookup, while request-local QueryClients and correct response
+delivery provide the actual server isolation boundary.

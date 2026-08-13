@@ -8,7 +8,8 @@
     "./static-get.test.ts",
     "./mutation.test.ts",
     "./react-use-query.test.tsx",
-    "./cache-scope.test.tsx"
+    "./cache-scope.test.tsx",
+    "./external-helpers.test.ts"
   ],
   "exclude": ["./consumer"]
 }

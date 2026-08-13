@@ -281,6 +281,93 @@ const productKey = utils.products({ id: productId }).get.queryKey();
 These utilities must be called from a React component or custom hook beneath
 both this `tq.Provider` and TanStack's `QueryClientProvider`.
 
+## Router loaders and SSR
+
+Use `createHelpers()` outside React. The returned option factories work with
+TanStack Router loaders and ordinary framework loaders without reading React
+context:
+
+```ts
+interface RouterContext {
+  queryClient: QueryClient;
+  helpers: ReturnType<typeof tq.createHelpers>;
+}
+
+const rootRoute = createRootRouteWithContext<RouterContext>()();
+
+const productRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/products/$productId",
+  loader: ({ context, params }) =>
+    context.queryClient.ensureQueryData(
+      context.helpers
+        .products({ id: params.productId })
+        .get.queryOptions(),
+    ),
+});
+```
+
+Create both the Treaty client and `QueryClient` for each server request. Never
+put either one in a server module-global singleton:
+
+```ts
+async function prepareRequest(request: Request, session: Session) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { staleTime: 60_000 },
+    },
+  });
+
+  // Application-defined: bind the official Treaty client to this request's
+  // normal server transport without exposing credentials in query keys.
+  const api = createRequestTreatyClient(request);
+  const publicHelpers = tq.createHelpers({ client: api });
+  const sessionHelpers = tq.createHelpers({
+    client: api,
+    cacheScope: ["user", session.user.id],
+  });
+
+  await Promise.all([
+    queryClient.ensureQueryData(
+      publicHelpers.countries.get.queryOptions(),
+    ),
+    queryClient.ensureQueryData(
+      sessionHelpers.account.access.get.queryOptions(),
+    ),
+  ]);
+
+  return dehydrate(queryClient);
+}
+```
+
+Hydrate that state into the render/client-side QueryClient using TanStack's
+`HydrationBoundary` or `hydrate()`. Recreate helpers with the same application
+prefix, route values, semantic input, and non-secret cache scope; the generated
+keys are stable across the server/client boundary.
+
+```tsx
+<QueryClientProvider client={queryClient}>
+  <HydrationBoundary state={dehydratedState}>
+    <tq.Provider client={api}>
+      <Application />
+    </tq.Provider>
+  </HydrationBoundary>
+</QueryClientProvider>
+```
+
+A cache scope prevents the current scope from reading another scope's key, but
+it is not an authorization or transport boundary. Never reuse a server
+QueryClient between requests, send one user's dehydrated state to another
+user, persist session-scoped state after logout, or place tokens, cookies, or
+credentials in keys. Use your framework's safe serialization mechanism when
+embedding dehydrated state in HTML; raw `JSON.stringify()` does not provide
+HTML/XSS escaping.
+
+See TanStack's official [Router React Query example](https://tanstack.com/router/latest/docs/framework/react/examples/basic-react-query),
+[hydration reference](https://tanstack.com/query/latest/docs/framework/react/reference/hydration),
+and [SSR guide](https://tanstack.com/query/latest/docs/framework/react/guides/ssr)
+for framework integration details.
+
 ## Mutations
 
 Mutation variables are the inferred Treaty body directly:

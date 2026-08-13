@@ -32,3 +32,6 @@ All notable changes to this project will be documented in this file.
 - Scope-aware route and GET invalidation.
 - Typed exact cache reads and writes with `getData` and `setData`.
 - Network-backed `ensureData` using the shared Treaty query factory.
+- Verified `createHelpers()` integration with real TanStack Router loaders.
+- Verified request-local QueryClient isolation and dehydration/hydration key
+  stability for public and scoped queries.
