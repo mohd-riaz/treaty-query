@@ -4,6 +4,6 @@
     "isolatedDeclarations": false,
     "types": ["bun"]
   },
-  "include": ["./scaffold.test.ts"],
+  "include": ["./static-get.test.ts"],
   "exclude": ["./consumer"]
 }

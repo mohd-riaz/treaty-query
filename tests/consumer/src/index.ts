@@ -1,9 +1,29 @@
-import { createTreatyQuery, version } from "treaty-query";
+import { treaty } from "@elysiajs/eden";
+import { QueryClient } from "@tanstack/react-query";
+import { Elysia } from "elysia";
+import {
+  createTreatyQuery,
+  TreatyQueryError,
+  version,
+} from "treaty-query";
 
-const treatyQuery = createTreatyQuery<{ readonly consumer: true }>();
+const app = new Elysia().get("/health", () => ({ ok: true }));
+const client = treaty(app);
+const helpers = createTreatyQuery<typeof app>().createHelpers({ client });
+const options = helpers.health.get.queryOptions({ staleTime: 1_000 });
+const queryClient = new QueryClient();
+const data = await queryClient.fetchQuery(options);
 
-if (treatyQuery.phase !== "scaffold" || version !== "0.1.0") {
-  throw new Error("The packed treaty-query package could not be consumed.");
+if (!data.ok || version !== "0.1.0") {
+  throw new Error("The packed treaty-query package returned invalid data.");
 }
 
-console.log(`Consumed treaty-query ${version}`);
+if (options.queryKey[0] !== "treaty-query") {
+  throw new Error("The packed treaty-query package returned an invalid key.");
+}
+
+if (!(TreatyQueryError.prototype instanceof Error)) {
+  throw new Error("The packed treaty-query error export is invalid.");
+}
+
+console.log(`Consumed treaty-query ${version} static GET options`);

@@ -1,4 +1,4 @@
 # Examples
 
-Runnable examples will be added when the provider and route proxy are
-implemented. Phase 1 intentionally contains no misleading placeholder app.
+The current static GET surface is shown in the root README. Runnable React and
+dynamic-route examples will be added with those implementation phases.
