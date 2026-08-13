@@ -1,7 +1,7 @@
 {
   "name": "treaty-query",
   "version": "0.1.0",
-  "description": "Type-safe TanStack Query bindings for Elysia Treaty clients.",
+  "description": "tRPC-style TanStack Query DX for official Elysia Treaty clients.",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -61,6 +61,7 @@
     "treaty",
     "tanstack-query",
     "react-query",
+    "trpc-like",
     "typescript"
   ],
   "license": "MIT",

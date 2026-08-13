@@ -1,9 +1,11 @@
 # treaty-query
 
-Type-safe TanStack Query bindings for Elysia Treaty clients.
+tRPC-style TanStack Query DX for Elysia Treaty, using the official client with
+no code generation or custom transport.
 
-> **Status:** `0.1.0` release candidate. The API is ready for initial release
-> review but has not been published yet.
+> **Status:** `0.1.0` is the initial public release and is available on
+> [npm](https://www.npmjs.com/package/treaty-query). The project is still in
+> early `0.x` development, so review the changelog when upgrading.
 
 ## Installation
 
@@ -16,6 +18,24 @@ bun add treaty-query @elysiajs/eden @tanstack/react-query elysia react
 The package is ESM-only and requires Node.js 18 or newer (or a compatible Bun
 runtime). See [the tested compatibility matrix](./docs/compatibility.md) before
 choosing peer versions.
+
+## Why Treaty Query?
+
+Elysia Treaty provides the end-to-end typed client. Treaty Query layers a
+tRPC-style route-proxy experience over that client for TanStack Query:
+
+```ts
+tq.account.access.get.useQuery();
+tq.products({ id }).patch.useMutation();
+await tq.useUtils().products.invalidate();
+```
+
+You keep Treaty's official request transport and TanStack Query's normal
+`QueryClient`, cache, devtools, hydration, persistence, and plugins. Treaty
+Query does not generate code or introduce another RPC protocol.
+
+“tRPC-style” describes the developer experience only. This project is not
+affiliated with tRPC and does not use or implement the tRPC runtime or protocol.
 
 ## React useQuery
 
