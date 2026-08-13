@@ -8,6 +8,11 @@ import {
 import { TreatyQueryError } from "./error.js";
 import { createGetKey } from "./query-key.js";
 import {
+  createMutationOperation,
+  isMutationMethodName,
+  type MutationOperation,
+} from "./mutation.js";
+import {
   appendRouteParameters,
   appendRouteProperty,
   resolveRouteMethod,
@@ -23,11 +28,7 @@ import type {
 } from "./types.js";
 
 type Callable = (...arguments_: never[]) => unknown;
-type NonGetTerminalMethod =
-  | "post"
-  | "put"
-  | "patch"
-  | "delete"
+type UnsupportedTerminalMethod =
   | "options"
   | "head"
   | "connect"
@@ -136,7 +137,9 @@ type RoutePropertyKey<TNode, TKey> = TKey extends string
     ? never
     : TKey extends "get"
       ? TKey
-      : TKey extends NonGetTerminalMethod
+      : TKey extends "post" | "put" | "patch" | "delete"
+        ? TKey
+      : TKey extends UnsupportedTerminalMethod
         ? never
         : TKey
   : never;
@@ -145,6 +148,8 @@ type HelperRouteProperties<TNode> = {
   readonly [TKey in keyof TNode as RoutePropertyKey<TNode, TKey>]:
     TKey extends "get"
       ? GetOperation<TNode[TKey]>
+      : TKey extends "post" | "put" | "patch" | "delete"
+        ? MutationOperation<TNode[TKey]>
       : TreatyQueryHelpers<TNode[TKey]>;
 };
 
@@ -224,6 +229,11 @@ function createRouteProxy(
       if (property === "get") {
         const method = resolveRouteMethod(client, route, "get");
         return createGetOperation(method, route, keyPrefix);
+      }
+
+      if (isMutationMethodName(property)) {
+        const method = resolveRouteMethod(client, route, property);
+        return createMutationOperation(method, property, route, keyPrefix);
       }
 
       return createRouteProxy(

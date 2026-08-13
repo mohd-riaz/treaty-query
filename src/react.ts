@@ -1,7 +1,9 @@
 import type { Treaty } from "@elysiajs/eden";
 import type { Elysia } from "elysia";
 import {
+  useMutation,
   useQuery,
+  type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
 import {
@@ -12,6 +14,17 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+
+import {
+  createMutationOperation,
+  isMutationMethodName,
+  type MutationBody,
+  type MutationData,
+  type MutationError,
+  type MutationFactoryResult,
+  type MutationOperationOptions,
+  type MutationRequest,
+} from "./mutation.js";
 
 import {
   createGetOperation,
@@ -33,11 +46,7 @@ import type {
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any>;
 type Callable = (...arguments_: never[]) => unknown;
-type NonGetTerminalMethod =
-  | "post"
-  | "put"
-  | "patch"
-  | "delete"
+type UnsupportedTerminalMethod =
   | "options"
   | "head"
   | "connect"
@@ -63,7 +72,9 @@ type HookRoutePropertyKey<TNode, TKey> = TKey extends string
     ? never
     : TKey extends "get"
       ? TKey
-      : TKey extends NonGetTerminalMethod
+      : TKey extends "post" | "put" | "patch" | "delete"
+        ? TKey
+      : TKey extends UnsupportedTerminalMethod
         ? never
         : TKey
   : never;
@@ -96,10 +107,39 @@ export type UseQueryOperation<TMethod> =
     ? RequiredUseQueryOperation<TMethod>
     : OptionalUseQueryOperation<TMethod>;
 
+export interface RequiredUseMutationOperation<TMethod> {
+  useMutation<TOnMutateResult = unknown>(
+    options: MutationOperationOptions<TMethod, TOnMutateResult>,
+  ): UseMutationResult<
+    MutationData<TMethod>,
+    MutationError<TMethod>,
+    MutationBody<TMethod>,
+    TOnMutateResult
+  >;
+}
+
+export interface OptionalUseMutationOperation<TMethod> {
+  useMutation<TOnMutateResult = unknown>(
+    options?: MutationOperationOptions<TMethod, TOnMutateResult>,
+  ): UseMutationResult<
+    MutationData<TMethod>,
+    MutationError<TMethod>,
+    MutationBody<TMethod>,
+    TOnMutateResult
+  >;
+}
+
+export type UseMutationOperation<TMethod> =
+  {} extends MutationRequest<TMethod>
+    ? OptionalUseMutationOperation<TMethod>
+    : RequiredUseMutationOperation<TMethod>;
+
 type HookRouteProperties<TNode> = {
   readonly [TKey in keyof TNode as HookRoutePropertyKey<TNode, TKey>]:
     TKey extends "get"
       ? UseQueryOperation<TNode[TKey]>
+      : TKey extends "post" | "put" | "patch" | "delete"
+        ? UseMutationOperation<TNode[TKey]>
       : TreatyQueryHooks<TNode[TKey]>;
 };
 
@@ -157,6 +197,46 @@ function createHookRouteProxy(
             return useQuery(
               operation.queryOptions(runtimeInput, runtimeOptions),
             ) as UseQueryResult<TData, Error>;
+          },
+        });
+      }
+
+      if (isMutationMethodName(property)) {
+        return Object.freeze({
+          useMutation<TOnMutateResult = unknown>(
+            options?: MutationOperationOptions<unknown, TOnMutateResult>,
+          ): UseMutationResult<unknown, Error, unknown, TOnMutateResult> {
+            const client = useContext(clientContext);
+
+            if (client === missingClient) {
+              throw new Error(
+                "Treaty Query hooks must be rendered inside this tq.Provider.",
+              );
+            }
+
+            const treatyMethod = resolveRouteMethod(client, route, property);
+            const operation = createMutationOperation(
+              treatyMethod,
+              property,
+              route,
+              keyPrefix,
+            ) as {
+              mutationOptions(
+                runtimeOptions?: MutationOperationOptions<
+                  unknown,
+                  TOnMutateResult
+                >,
+              ): MutationFactoryResult<unknown, TOnMutateResult>;
+            };
+
+            return useMutation(
+              operation.mutationOptions(options),
+            ) as unknown as UseMutationResult<
+              unknown,
+              Error,
+              unknown,
+              TOnMutateResult
+            >;
           },
         });
       }

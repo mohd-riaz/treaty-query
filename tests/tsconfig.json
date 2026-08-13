@@ -6,6 +6,7 @@
   },
   "include": [
     "./static-get.test.ts",
+    "./mutation.test.ts",
     "./react-use-query.test.tsx"
   ],
   "exclude": ["./consumer"]

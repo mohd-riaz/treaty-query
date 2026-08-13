@@ -16,6 +16,19 @@ export type StaticGetMethod = (
   options?: StaticGetRequestOptions,
 ) => Promise<unknown>;
 
+export interface MutationRequestOptions extends GetTransportOptions {
+  readonly query?: unknown;
+}
+
+export interface MutationTreatyRequestOptions extends MutationRequestOptions {
+  readonly throwHttpError: false;
+}
+
+export type MutationMethod = (
+  body: unknown,
+  options?: MutationTreatyRequestOptions,
+) => Promise<unknown>;
+
 interface TreatyResult {
   readonly data: unknown;
   readonly error: unknown;
@@ -57,21 +70,12 @@ function getHeaders(value: unknown): HeadersInit | undefined {
   return undefined;
 }
 
-export async function executeStaticGet(
-  method: StaticGetMethod,
-  signal: AbortSignal,
-  input?: { readonly query?: unknown },
-  request?: GetTransportOptions,
+async function executeTreatyRequest(
+  invoke: () => Promise<unknown>,
 ): Promise<unknown> {
   let result: unknown;
-
   try {
-    result = await method({
-      ...request,
-      ...(input?.query === undefined ? {} : { query: input.query }),
-      fetch: { ...request?.fetch, signal },
-      throwHttpError: false,
-    });
+    result = await invoke();
   } catch (cause) {
     if (isRecord(cause) && typeof cause.status === "number") {
       throw new TreatyQueryError(cause.status, getErrorValue(cause), { cause });
@@ -96,4 +100,33 @@ export async function executeStaticGet(
   }
 
   return result.data === undefined ? null : result.data;
+}
+
+export async function executeStaticGet(
+  method: StaticGetMethod,
+  signal: AbortSignal,
+  input?: { readonly query?: unknown },
+  request?: GetTransportOptions,
+): Promise<unknown> {
+  return executeTreatyRequest(() =>
+    method({
+      ...request,
+      ...(input?.query === undefined ? {} : { query: input.query }),
+      fetch: { ...request?.fetch, signal },
+      throwHttpError: false,
+    }),
+  );
+}
+
+export async function executeMutation(
+  method: MutationMethod,
+  body: unknown,
+  request?: MutationRequestOptions,
+): Promise<unknown> {
+  return executeTreatyRequest(() =>
+    method(body, {
+      ...request,
+      throwHttpError: false,
+    }),
+  );
 }

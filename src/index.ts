@@ -10,6 +10,18 @@ export {
   type TreatyQueryErrorOptions,
 } from "./error.js";
 export type {
+  MutationBody,
+  MutationData,
+  MutationError,
+  MutationFactoryResult,
+  MutationMethodName,
+  MutationOperation,
+  MutationOperationOptions,
+  MutationRequest,
+  OptionalMutationOperation,
+  RequiredMutationOperation,
+} from "./mutation.js";
+export type {
   GetData,
   GetError,
   GetInput,
@@ -25,22 +37,30 @@ export type {
   TreatyQueryHelpers,
 } from "./static-helpers.js";
 export type {
+  OptionalUseMutationOperation,
   OptionalUseQueryOperation,
+  RequiredUseMutationOperation,
   RequiredUseQueryOperation,
   StaticTreatyQueryHooks,
   StaticUseQueryOperation,
   TreatyQueryHooks,
   TreatyQueryProvider,
   TreatyQueryProviderProps,
+  UseMutationOperation,
   UseQueryOperation,
 } from "./react.js";
 export type {
   GetQueryOptions,
   GetQueryOptionsInput,
+  MutationOptionsInput,
   SerializableValue,
   StaticGetQueryOptions,
   StaticGetQueryOptionsInput,
   TreatyQueryKey,
+  TreatyMutationKey,
+  TreatyMutationMethod,
+  TreatyMutationOperation,
+  TreatyMutationOptions,
   TreatyQueryOperation,
   TreatyQueryParameterEntry,
   TreatyQueryParameterSegment,

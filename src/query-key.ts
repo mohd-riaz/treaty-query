@@ -2,6 +2,9 @@ import type { RouteSegment } from "./route.js";
 import type {
   SerializableValue,
   TreatyQueryKey,
+  TreatyMutationKey,
+  TreatyMutationMethod,
+  TreatyMutationOperation,
   TreatyQueryOperation,
   TreatyQueryParameterEntry,
   TreatyQueryParameterSegment,
@@ -58,6 +61,45 @@ export function createGetKey(
 ): TreatyQueryKey {
   const path = createPathKey(route);
   const operation = createOperation(input);
+
+  if (keyPrefix === undefined) {
+    return Object.freeze([namespace, path, operation]);
+  }
+
+  const prefix: TreatyQueryPrefix = Object.freeze([
+    "prefix",
+    Object.freeze([...keyPrefix]),
+  ]);
+
+  return Object.freeze([namespace, prefix, path, operation]);
+}
+
+function createMutationOperation(
+  method: TreatyMutationMethod,
+  query: unknown,
+): TreatyMutationOperation {
+  if (query === undefined) {
+    return Object.freeze({
+      kind: "mutation",
+      method,
+    });
+  }
+
+  return Object.freeze({
+    kind: "mutation",
+    method,
+    input: Object.freeze({ query }),
+  });
+}
+
+export function createMutationKey(
+  route: readonly RouteSegment[],
+  method: TreatyMutationMethod,
+  query: unknown,
+  keyPrefix: readonly SerializableValue[] | undefined,
+): TreatyMutationKey {
+  const path = createPathKey(route);
+  const operation = createMutationOperation(method, query);
 
   if (keyPrefix === undefined) {
     return Object.freeze([namespace, path, operation]);

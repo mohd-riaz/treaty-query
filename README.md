@@ -3,8 +3,9 @@
 Type-safe TanStack Query bindings for Elysia Treaty clients.
 
 > **Status:** early development. GET option factories and React `useQuery`
-> hooks support semantic query input and dynamic path parameters. Mutations and
-> cache scopes are not implemented yet.
+> hooks support semantic query input and dynamic path parameters. POST, PUT,
+> PATCH, and DELETE mutations are implemented. Cache scopes and typed cache
+> utilities are not implemented yet.
 
 ## React useQuery
 
@@ -131,6 +132,55 @@ const tq = createTreatyQuery<App>({
   keyPrefix: ["admin-api"],
 });
 ```
+
+## Mutations
+
+Mutation variables are the inferred Treaty body directly:
+
+```tsx
+const createProduct = tq.products.post.useMutation({
+  onSuccess(data, body) {
+    console.log(data.id, body.name);
+  },
+});
+
+createProduct.mutate({
+  name: "Latte",
+  price: 20,
+});
+```
+
+Dynamic parameters stay captured by the route. Mutation query parameters,
+headers, and fetch settings are static for that mutation observer:
+
+```tsx
+const updateProduct = tq.products({ id }).patch.useMutation({
+  request: {
+    query: { notify: true },
+    headers: { "x-operation-id": operationId },
+  },
+});
+
+updateProduct.mutate({ name: "Updated product" });
+```
+
+Outside React, the same operation factory is available from bound helpers:
+
+```ts
+const options = helpers.products.post.mutationOptions({
+  onSuccess(data, body) {
+    console.log(data, body);
+  },
+});
+```
+
+Mutation keys include the library namespace, optional API prefix, positional
+route parameters, HTTP method, and static semantic query parameters. Bodies,
+headers, and fetch configuration are excluded. Mutation keys are not cache
+entries and will not receive the planned cache scope.
+
+Mutation query parameters are intentionally fixed when the mutation observer
+is created. Create another observer when those parameters need to change.
 
 ## Planned cache scopes
 

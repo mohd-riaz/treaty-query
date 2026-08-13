@@ -1,6 +1,8 @@
 import type {
   DataTag,
+  MutationFunction,
   QueryFunction,
+  UseMutationOptions,
   UseQueryOptions,
 } from "@tanstack/react-query";
 
@@ -36,6 +38,14 @@ export interface TreatyQueryOperation {
   readonly input?: TreatyQuerySemanticInput;
 }
 
+export type TreatyMutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";
+
+export interface TreatyMutationOperation {
+  readonly kind: "mutation";
+  readonly method: TreatyMutationMethod;
+  readonly input?: TreatyQuerySemanticInput;
+}
+
 export type TreatyQueryKey =
   | readonly [
       "treaty-query",
@@ -47,6 +57,19 @@ export type TreatyQueryKey =
       TreatyQueryPrefix,
       readonly TreatyQueryPathSegment[],
       TreatyQueryOperation,
+    ];
+
+export type TreatyMutationKey =
+  | readonly [
+      "treaty-query",
+      readonly TreatyQueryPathSegment[],
+      TreatyMutationOperation,
+    ]
+  | readonly [
+      "treaty-query",
+      TreatyQueryPrefix,
+      readonly TreatyQueryPathSegment[],
+      TreatyMutationOperation,
     ];
 
 export type GetQueryOptionsInput<
@@ -80,3 +103,23 @@ export type StaticGetQueryOptions<
   TError,
   TData = TQueryFnData,
 > = GetQueryOptions<TQueryFnData, TError, TData>;
+
+export type MutationOptionsInput<
+  TData,
+  TError,
+  TVariables,
+  TOnMutateResult = unknown,
+> = Omit<
+  UseMutationOptions<TData, TError, TVariables, TOnMutateResult>,
+  "mutationFn" | "mutationKey"
+>;
+
+export type TreatyMutationOptions<
+  TData,
+  TError,
+  TVariables,
+  TOnMutateResult = unknown,
+> = MutationOptionsInput<TData, TError, TVariables, TOnMutateResult> & {
+  readonly mutationKey: TreatyMutationKey;
+  readonly mutationFn: MutationFunction<TData, TVariables>;
+};

@@ -7,6 +7,13 @@ export interface RouteParameterSegment {
 
 export type RouteSegment = string | RouteParameterSegment;
 
+export type TreatyHttpMethod =
+  | "get"
+  | "post"
+  | "put"
+  | "patch"
+  | "delete";
+
 export function appendRouteProperty(
   route: readonly RouteSegment[],
   property: string,
@@ -52,7 +59,7 @@ export function resolveRouteNode(
 export function resolveRouteMethod(
   client: unknown,
   route: readonly RouteSegment[],
-  method: "get",
+  method: TreatyHttpMethod,
 ): unknown {
   const node = resolveRouteNode(client, route);
   return (node as Record<string, unknown>)[method];

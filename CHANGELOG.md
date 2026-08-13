@@ -20,3 +20,7 @@ All notable changes to this project will be documented in this file.
 - Positional static and nested dynamic route-parameter calls.
 - Query keys containing normalized path parameters and semantic input.
 - Transport-only request headers and fetch options excluded from query keys.
+- Typed POST, PUT, PATCH, and DELETE mutation hooks and option factories.
+- Body-only mutation variables with static query and transport configuration.
+- Namespaced mutation keys with positional dynamic parameters.
+- Mutation success, callback, HTTP-error, and transport inference.

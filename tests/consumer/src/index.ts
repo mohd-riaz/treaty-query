@@ -12,7 +12,14 @@ const app = new Elysia()
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
   })
-  .get("/products/:id", ({ params }) => ({ id: params.id }));
+  .get("/products/:id", ({ params }) => ({ id: params.id }))
+  .post(
+    "/products",
+    ({ body }) => ({ id: "created-1", name: body.name, price: body.price }),
+    {
+      body: t.Object({ name: t.String(), price: t.Number() }),
+    },
+  );
 const client = treaty(app);
 const tq = createTreatyQuery<typeof app>();
 const helpers = tq.createHelpers({ client });
@@ -26,8 +33,22 @@ const search = await queryClient.fetchQuery(
 );
 const productOptions = helpers.products({ id: 42 }).get.queryOptions();
 const product = await queryClient.fetchQuery(productOptions);
+const mutationOptions = helpers.products.post.mutationOptions();
+const created = await mutationOptions.mutationFn(
+  { name: "Latte", price: 20 },
+  {
+    client: queryClient,
+    meta: undefined,
+    mutationKey: mutationOptions.mutationKey,
+  },
+);
 
-if (!health.ok || search.term !== "coffee" || product.id !== "42") {
+if (
+  !health.ok ||
+  search.term !== "coffee" ||
+  product.id !== "42" ||
+  created.id !== "created-1"
+) {
   throw new Error("The packed treaty-query package returned invalid data.");
 }
 
@@ -45,9 +66,10 @@ if (!(TreatyQueryError.prototype instanceof Error)) {
 if (
   typeof tq.Provider !== "function" ||
   typeof tq.search.get.useQuery !== "function" ||
-  typeof tq.products({ id: 1 }).get.useQuery !== "function"
+  typeof tq.products({ id: 1 }).get.useQuery !== "function" ||
+  typeof tq.products.post.useMutation !== "function"
 ) {
   throw new Error("The packed treaty-query React API is invalid.");
 }
 
-console.log(`Consumed treaty-query ${version} Phase 4 API`);
+console.log(`Consumed treaty-query ${version} Phase 5 API`);

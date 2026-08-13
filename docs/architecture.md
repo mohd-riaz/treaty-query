@@ -34,6 +34,17 @@ the caller's `request` option, are removed before passing options to TanStack,
 and never enter the key. TanStack's abort signal always replaces a transport
 signal.
 
+Phase 5 adds mutation operations for POST, PUT, PATCH, and DELETE. The inferred
+Treaty body is TanStack's variables value. The official Treaty method's second
+argument is bound from `options.request`, so query parameters and transport
+configuration remain fixed for one mutation observer and never become part of
+callback variables.
+
+Mutation keys share the namespace, optional prefix, and positional route model.
+They contain the HTTP method and static query parameters, but exclude bodies,
+headers, and fetch configuration. Mutation execution uses the same structured
+result normalizer and `TreatyQueryError` conversion as queries.
+
 Cache scopes will be optional and used only when a response depends on hidden
 server context. Public endpoints, and routes whose visible path or input already
 contains the relevant discriminator, should remain unscoped.

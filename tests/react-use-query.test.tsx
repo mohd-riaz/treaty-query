@@ -38,7 +38,14 @@ const app = new Elysia()
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
   })
-  .get("/products/:id", ({ params }) => ({ id: params.id }));
+  .get("/products/:id", ({ params }) => ({ id: params.id }))
+  .post(
+    "/products",
+    ({ body }) => ({ id: "created-1", name: body.name, price: body.price }),
+    {
+      body: t.Object({ name: t.String(), price: t.Number() }),
+    },
+  );
 
 const client = treaty(app);
 const tq = createTreatyQuery<typeof app>();
@@ -60,14 +67,21 @@ const alternateApp = new Elysia()
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
   })
-  .get("/products/:id", ({ params }) => ({ id: params.id }));
+  .get("/products/:id", ({ params }) => ({ id: params.id }))
+  .post(
+    "/products",
+    ({ body }) => ({ id: "alternate-1", name: body.name, price: body.price }),
+    {
+      body: t.Object({ name: t.String(), price: t.Number() }),
+    },
+  );
 const alternateClient = treaty(alternateApp);
 
 GlobalRegistrator.register({
   url: "http://localhost/",
 });
 
-const { cleanup, render, waitFor } = await import("@testing-library/react");
+const { act, cleanup, render, waitFor } = await import("@testing-library/react");
 
 function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -261,5 +275,60 @@ describe("React static GET useQuery", () => {
       // @ts-expect-error The search hook requires semantic query input.
       tq.search.get.useQuery();
     }
+  });
+
+  test("executes a typed body mutation through the shared factory", async () => {
+    const queryClient = createQueryClient();
+    let mutate:
+      | ((body: { name: string; price: number }) => Promise<{
+          id: string;
+          name: string;
+          price: number;
+        }>)
+      | undefined;
+    let latestStatus: string | undefined;
+    let callbackBodyName: string | undefined;
+    let callbackResultId: string | undefined;
+
+    function Probe(): null {
+      const mutation = tq.products.post.useMutation({
+        onSuccess(data, body) {
+          callbackResultId = data.id;
+          callbackBodyName = body.name;
+        },
+      });
+
+      mutate = mutation.mutateAsync;
+      latestStatus = mutation.status;
+      return null;
+    }
+
+    render(
+      <Providers queryClient={queryClient}>
+        <Probe />
+      </Providers>,
+    );
+
+    let result: Awaited<ReturnType<NonNullable<typeof mutate>>> | undefined;
+    await act(async () => {
+      result = await mutate?.({ name: "Latte", price: 20 });
+    });
+
+    await waitFor(() => expect(latestStatus).toBe("success"));
+
+    expect(result).toEqual({
+      id: "created-1",
+      name: "Latte",
+      price: 20,
+    });
+    expect(callbackResultId).toBe("created-1");
+    expect(callbackBodyName).toBe("Latte");
+    expect(
+      queryClient.getMutationCache().getAll()[0]?.options.mutationKey,
+    ).toEqual([
+      "treaty-query",
+      ["products"],
+      { kind: "mutation", method: "POST" },
+    ]);
   });
 });
