@@ -1,5 +1,7 @@
 import type { RouteSegment } from "./route.js";
+import { createCacheScopeMarker } from "./cache-scope.js";
 import type {
+  CacheScope,
   SerializableValue,
   TreatyQueryKey,
   TreatyMutationKey,
@@ -14,6 +16,14 @@ import type {
 } from "./types.js";
 
 const namespace = "treaty-query" as const;
+
+export function createKeyPrefix(
+  keyPrefix: readonly SerializableValue[] | undefined,
+): TreatyQueryPrefix | undefined {
+  return keyPrefix === undefined
+    ? undefined
+    : Object.freeze(["prefix", Object.freeze([...keyPrefix])]);
+}
 
 function createParameterKey(
   parameters: Readonly<Record<string, string | number>>,
@@ -58,20 +68,25 @@ export function createGetKey(
   route: readonly RouteSegment[],
   input: TreatyQuerySemanticInput | undefined,
   keyPrefix: readonly SerializableValue[] | undefined,
+  cacheScope: CacheScope | undefined,
 ): TreatyQueryKey {
   const path = createPathKey(route);
   const operation = createOperation(input);
+  const scope = cacheScope === undefined
+    ? undefined
+    : createCacheScopeMarker(cacheScope);
 
   if (keyPrefix === undefined) {
-    return Object.freeze([namespace, path, operation]);
+    return scope === undefined
+      ? Object.freeze([namespace, path, operation])
+      : Object.freeze([namespace, scope, path, operation]);
   }
 
-  const prefix: TreatyQueryPrefix = Object.freeze([
-    "prefix",
-    Object.freeze([...keyPrefix]),
-  ]);
+  const prefix = createKeyPrefix(keyPrefix) as TreatyQueryPrefix;
 
-  return Object.freeze([namespace, prefix, path, operation]);
+  return scope === undefined
+    ? Object.freeze([namespace, prefix, path, operation])
+    : Object.freeze([namespace, prefix, scope, path, operation]);
 }
 
 function createMutationOperation(
@@ -105,10 +120,7 @@ export function createMutationKey(
     return Object.freeze([namespace, path, operation]);
   }
 
-  const prefix: TreatyQueryPrefix = Object.freeze([
-    "prefix",
-    Object.freeze([...keyPrefix]),
-  ]);
+  const prefix = createKeyPrefix(keyPrefix) as TreatyQueryPrefix;
 
   return Object.freeze([namespace, prefix, path, operation]);
 }

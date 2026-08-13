@@ -5,12 +5,15 @@ import {
   createTreatyQueryHelpers,
   type TreatyQueryHelpers,
 } from "./static-helpers.js";
+import { normalizeCacheScope } from "./cache-scope.js";
 import {
   createReactTreatyQueryRuntime,
+  type CacheScopeProvider,
   type TreatyQueryHooks,
   type TreatyQueryProvider,
+  type TreatyQueryUtils,
 } from "./react.js";
-import type { SerializableValue } from "./types.js";
+import type { CacheScope, SerializableValue } from "./types.js";
 
 type AnyElysia = Elysia<any, any, any, any, any, any, any>;
 
@@ -20,10 +23,13 @@ export interface CreateTreatyQueryOptions {
 
 export interface CreateHelpersOptions<TApp extends AnyElysia> {
   readonly client: Treaty.Create<TApp>;
+  readonly cacheScope?: CacheScope;
 }
 
 export interface TreatyQueryRoot<TApp extends AnyElysia> {
   readonly Provider: TreatyQueryProvider<TApp>;
+  readonly CacheScope: CacheScopeProvider;
+  useUtils(): TreatyQueryUtils;
   createHelpers(
     options: CreateHelpersOptions<TApp>,
   ): TreatyQueryHelpers<Treaty.Create<TApp>>;
@@ -39,10 +45,18 @@ export function createTreatyQuery<TApp extends AnyElysia>(
   const reactRuntime = createReactTreatyQueryRuntime<TApp>(options.keyPrefix);
   const root: TreatyQueryRoot<TApp> = Object.freeze({
     Provider: reactRuntime.Provider,
+    CacheScope: reactRuntime.CacheScope,
+    useUtils: reactRuntime.useUtils,
     createHelpers(
       helperOptions: CreateHelpersOptions<TApp>,
     ): TreatyQueryHelpers<Treaty.Create<TApp>> {
-      return createTreatyQueryHelpers(helperOptions.client, options.keyPrefix);
+      return createTreatyQueryHelpers(
+        helperOptions.client,
+        options.keyPrefix,
+        helperOptions.cacheScope === undefined
+          ? undefined
+          : normalizeCacheScope(helperOptions.cacheScope),
+      );
     },
   });
 

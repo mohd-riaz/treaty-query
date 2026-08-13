@@ -37,6 +37,8 @@ export type {
   TreatyQueryHelpers,
 } from "./static-helpers.js";
 export type {
+  CacheScopeProvider,
+  CacheScopeProviderProps,
   OptionalUseMutationOperation,
   OptionalUseQueryOperation,
   RequiredUseMutationOperation,
@@ -46,10 +48,12 @@ export type {
   TreatyQueryHooks,
   TreatyQueryProvider,
   TreatyQueryProviderProps,
+  TreatyQueryUtils,
   UseMutationOperation,
   UseQueryOperation,
 } from "./react.js";
 export type {
+  CacheScope,
   GetQueryOptions,
   GetQueryOptionsInput,
   MutationOptionsInput,
@@ -66,6 +70,7 @@ export type {
   TreatyQueryParameterSegment,
   TreatyQueryPathSegment,
   TreatyQueryPrefix,
+  TreatyQueryScope,
   TreatyQuerySemanticInput,
 } from "./types.js";
 

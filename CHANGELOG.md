@@ -24,3 +24,7 @@ All notable changes to this project will be documented in this file.
 - Body-only mutation variables with static query and transport configuration.
 - Namespaced mutation keys with positional dynamic parameters.
 - Mutation success, callback, HTTP-error, and transport inference.
+- Optional React and helper-bound cache scopes for hidden server context.
+- Nested scope override, per-query override, and explicit inheritance disable.
+- Serializable tuple scope validation and immutable scope snapshots.
+- Exact previous-scope query removal isolated by namespace and API prefix.

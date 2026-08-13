@@ -7,7 +7,8 @@
   "include": [
     "./static-get.test.ts",
     "./mutation.test.ts",
-    "./react-use-query.test.tsx"
+    "./react-use-query.test.tsx",
+    "./cache-scope.test.tsx"
   ],
   "exclude": ["./consumer"]
 }

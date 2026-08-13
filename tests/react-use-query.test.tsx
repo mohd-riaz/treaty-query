@@ -4,12 +4,18 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import {
   QueryClient,
   QueryClientProvider,
+  type QueryKey,
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { Elysia, t } from "elysia";
 import { type ReactElement } from "react";
 
-import { createTreatyQuery, TreatyQueryError } from "../src/index";
+import {
+  createTreatyQuery,
+  TreatyQueryError,
+  type CacheScope,
+  type TreatyQueryUtils,
+} from "../src/index";
 
 let healthCalls = 0;
 
@@ -330,5 +336,116 @@ describe("React static GET useQuery", () => {
       ["products"],
       { kind: "mutation", method: "POST" },
     ]);
+  });
+
+  test("uses the nearest CacheScope with per-query override and disable", () => {
+    const queryClient = createQueryClient();
+
+    function Probe(props: {
+      readonly cacheScope?: CacheScope | false;
+    }): null {
+      tq.health.get.useQuery(undefined, {
+        enabled: false,
+        ...(props.cacheScope === undefined
+          ? {}
+          : { cacheScope: props.cacheScope }),
+      });
+      return null;
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <tq.Provider client={client}>
+          <tq.CacheScope value="parent">
+            <Probe />
+            <tq.CacheScope value={["user", { id: "child" }] as const}>
+              <Probe />
+              <Probe cacheScope="per-query" />
+              <Probe cacheScope={false} />
+            </tq.CacheScope>
+          </tq.CacheScope>
+        </tq.Provider>
+      </QueryClientProvider>,
+    );
+
+    const keys = queryClient
+      .getQueryCache()
+      .getAll()
+      .map((query) => query.queryKey);
+    expect(keys).toContainEqual([
+      "treaty-query",
+      ["scope", "parent"],
+      ["health"],
+      { kind: "query", method: "GET" },
+    ]);
+    expect(keys).toContainEqual([
+      "treaty-query",
+      ["scope", ["user", { id: "child" }]],
+      ["health"],
+      { kind: "query", method: "GET" },
+    ]);
+    expect(keys).toContainEqual([
+      "treaty-query",
+      ["scope", "per-query"],
+      ["health"],
+      { kind: "query", method: "GET" },
+    ]);
+    expect(keys).toContainEqual([
+      "treaty-query",
+      ["health"],
+      { kind: "query", method: "GET" },
+    ]);
+  });
+
+  test("removes only the exact previous scope from this API prefix", () => {
+    const queryClient = createQueryClient();
+    const prefixedTq = createTreatyQuery<typeof app>({
+      keyPrefix: ["admin-api"],
+    });
+    const helpers = tq.createHelpers({ client });
+    const prefixedHelpers = prefixedTq.createHelpers({ client });
+    const previous = helpers.health.get.queryOptions(undefined, {
+      cacheScope: ["user", { id: "previous" }] as const,
+    }).queryKey;
+    const current = helpers.health.get.queryOptions(undefined, {
+      cacheScope: ["user", { id: "current" }] as const,
+    }).queryKey;
+    const publicKey = helpers.health.get.queryOptions().queryKey;
+    const otherPrefix = prefixedHelpers.health.get.queryOptions(undefined, {
+      cacheScope: ["user", { id: "previous" }] as const,
+    }).queryKey;
+    const unrelated = ["another-library", "health"] as const;
+    let utils: TreatyQueryUtils | undefined;
+
+    queryClient.setQueryData(previous as QueryKey, "previous");
+    queryClient.setQueryData(current as QueryKey, "current");
+    queryClient.setQueryData(publicKey as QueryKey, "public");
+    queryClient.setQueryData(otherPrefix as QueryKey, "other-prefix");
+    queryClient.setQueryData(unrelated, "unrelated");
+
+    function Probe(): null {
+      utils = tq.useUtils();
+      return null;
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <tq.Provider client={client}>
+          <Probe />
+        </tq.Provider>
+      </QueryClientProvider>,
+    );
+
+    act(() => {
+      utils?.removeCacheScope(["user", { id: "previous" }] as const);
+    });
+
+    expect(queryClient.getQueryData(previous as QueryKey)).toBeUndefined();
+    expect(queryClient.getQueryData<string>(current as QueryKey)).toBe("current");
+    expect(queryClient.getQueryData<string>(publicKey as QueryKey)).toBe("public");
+    expect(queryClient.getQueryData<string>(otherPrefix as QueryKey)).toBe(
+      "other-prefix",
+    );
+    expect(queryClient.getQueryData<string>(unrelated)).toBe("unrelated");
   });
 });

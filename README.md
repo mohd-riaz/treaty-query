@@ -2,10 +2,9 @@
 
 Type-safe TanStack Query bindings for Elysia Treaty clients.
 
-> **Status:** early development. GET option factories and React `useQuery`
-> hooks support semantic query input and dynamic path parameters. POST, PUT,
-> PATCH, and DELETE mutations are implemented. Cache scopes and typed cache
-> utilities are not implemented yet.
+> **Status:** early development. GET option factories, React `useQuery`,
+> dynamic path parameters, mutations, and optional cache scopes are
+> implemented. Broader typed cache utilities are still planned.
 
 ## React useQuery
 
@@ -133,6 +132,92 @@ const tq = createTreatyQuery<App>({
 });
 ```
 
+## Optional cache scopes
+
+Use a cache scope only when a GET response depends on hidden server context,
+such as the authenticated session stored in an HTTP-only cookie. It is not a
+mandatory user or tenant feature. Public endpoints, and routes whose path or
+semantic input already contains the relevant identifier, should remain
+unscoped so their cached data stays shareable.
+
+```tsx
+<tq.Provider client={api}>
+  <PublicApp />
+
+  <tq.CacheScope value={["user", session.user.id]}>
+    <AuthenticatedApp />
+  </tq.CacheScope>
+</tq.Provider>
+```
+
+Nested `CacheScope` components use the nearest value. A query can override that
+value, or opt out of an inherited scope:
+
+```tsx
+const access = tq.account.access.get.useQuery(undefined, {
+  cacheScope: ["user", session.user.id],
+});
+
+const countries = tq.countries.get.useQuery(undefined, {
+  cacheScope: false,
+});
+```
+
+The precedence is the per-query `cacheScope`, then the nearest React
+`CacheScope`, then no scope. Outside React, bind a default to helpers:
+
+```ts
+const helpers = tq.createHelpers({
+  client: api,
+  cacheScope: ["user", userId],
+});
+```
+
+A scope is a string, finite number, or non-empty readonly serializable tuple.
+Use a tuple when a structured identity is useful; plain objects are supported
+inside tuples, but not as the top-level scope:
+
+```ts
+const scope = ["tenant-user", { tenantId, userId }] as const;
+```
+
+Scoped queries add an immutable marker before the route while retaining all
+ordinary route parameters and semantic query input:
+
+```ts
+[
+  "treaty-query",
+  ["scope", ["user", userId]],
+  ["account", "access"],
+  { kind: "query", method: "GET" },
+]
+```
+
+After logout or an account switch, remove the previous scope once components
+using it have unmounted or switched values:
+
+```tsx
+function SessionCacheCleanup() {
+  const utils = tq.useUtils();
+
+  function removePreviousUser(previousUserId: string) {
+    utils.removeCacheScope(["user", previousUserId]);
+  }
+
+  return null;
+}
+```
+
+Removal matches the complete scope and this instance's configured key prefix.
+It leaves public queries, other scopes, mutation entries, differently prefixed
+Treaty Query instances, and unrelated TanStack queries untouched.
+
+Never use authentication tokens, cookies, authorization headers, passwords,
+or other secrets as a cache scope. If a visible route parameter or query input
+already separates the data, keep the query outside `CacheScope` or use
+`cacheScope: false`; the library does not guess whether identifiers are
+duplicated.
+
 ## Mutations
 
 Mutation variables are the inferred Treaty body directly:
@@ -177,16 +262,10 @@ const options = helpers.products.post.mutationOptions({
 Mutation keys include the library namespace, optional API prefix, positional
 route parameters, HTTP method, and static semantic query parameters. Bodies,
 headers, and fetch configuration are excluded. Mutation keys are not cache
-entries and will not receive the planned cache scope.
+entries and do not receive cache scopes.
 
 Mutation query parameters are intentionally fixed when the mutation observer
 is created. Create another observer when those parameters need to change.
-
-## Planned cache scopes
-
-Session-dependent queries will be able to opt into a cache scope, while public
-queries remain unscoped and shareable. A cache scope is for hidden server
-context—not a mandatory tenant feature—and must never contain secrets.
 
 ## Development
 

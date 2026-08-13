@@ -45,6 +45,20 @@ They contain the HTTP method and static query parameters, but exclude bodies,
 headers, and fetch configuration. Mutation execution uses the same structured
 result normalizer and `TreatyQueryError` conversion as queries.
 
-Cache scopes will be optional and used only when a response depends on hidden
-server context. Public endpoints, and routes whose visible path or input already
-contains the relevant discriminator, should remain unscoped.
+Phase 6 adds optional query cache scopes for responses that depend on hidden
+server context. A separate React context carries the nearest scope without
+changing the Treaty client provider. Bound helpers can carry the same default,
+and a query-level value overrides either source; `false` explicitly disables
+inheritance.
+
+Scoped GET keys place an immutable `["scope", value]` marker after the optional
+application prefix and before the route. Scope values are validated and
+snapshotted as strings, finite numbers, or non-empty readonly serializable
+tuples. Route parameters and semantic input keep their existing key positions.
+Mutations remain unscoped.
+
+`tq.useUtils().removeCacheScope(scope)` removes query-cache entries only when
+the key has this library's namespace, this instance's exact optional prefix,
+and the complete stable scope value. Public entries, other scopes, mutation
+entries, differently prefixed instances, and unrelated TanStack queries are
+not affected.

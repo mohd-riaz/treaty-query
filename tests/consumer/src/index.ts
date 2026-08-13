@@ -4,6 +4,7 @@ import { Elysia, t } from "elysia";
 import {
   createTreatyQuery,
   TreatyQueryError,
+  type CacheScope,
   version,
 } from "treaty-query";
 
@@ -23,6 +24,8 @@ const app = new Elysia()
 const client = treaty(app);
 const tq = createTreatyQuery<typeof app>();
 const helpers = tq.createHelpers({ client });
+const scope: CacheScope = ["user", { id: "consumer-user" }];
+const scopedHelpers = tq.createHelpers({ client, cacheScope: scope });
 const queryClient = new QueryClient();
 
 const health = await queryClient.fetchQuery(
@@ -32,6 +35,7 @@ const search = await queryClient.fetchQuery(
   helpers.search.get.queryOptions({ query: { term: "coffee" } }),
 );
 const productOptions = helpers.products({ id: 42 }).get.queryOptions();
+const scopedHealthOptions = scopedHelpers.health.get.queryOptions();
 const product = await queryClient.fetchQuery(productOptions);
 const mutationOptions = helpers.products.post.mutationOptions();
 const created = await mutationOptions.mutationFn(
@@ -54,7 +58,9 @@ if (
 
 if (
   version !== "0.1.0" ||
-  productOptions.queryKey[0] !== "treaty-query"
+  productOptions.queryKey[0] !== "treaty-query" ||
+  JSON.stringify(scopedHealthOptions.queryKey[1]) !==
+    JSON.stringify(["scope", ["user", { id: "consumer-user" }]])
 ) {
   throw new Error("The packed treaty-query package returned invalid metadata.");
 }
@@ -65,6 +71,8 @@ if (!(TreatyQueryError.prototype instanceof Error)) {
 
 if (
   typeof tq.Provider !== "function" ||
+  typeof tq.CacheScope !== "function" ||
+  typeof tq.useUtils !== "function" ||
   typeof tq.search.get.useQuery !== "function" ||
   typeof tq.products({ id: 1 }).get.useQuery !== "function" ||
   typeof tq.products.post.useMutation !== "function"
@@ -72,4 +80,4 @@ if (
   throw new Error("The packed treaty-query React API is invalid.");
 }
 
-console.log(`Consumed treaty-query ${version} Phase 5 API`);
+console.log(`Consumed treaty-query ${version} Phase 6 API`);

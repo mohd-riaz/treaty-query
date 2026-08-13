@@ -14,10 +14,17 @@ export type SerializableValue =
   | readonly SerializableValue[]
   | { readonly [key: string]: SerializableValue };
 
+export type CacheScope =
+  | string
+  | number
+  | readonly [SerializableValue, ...SerializableValue[]];
+
 export type TreatyQueryPrefix = readonly [
   "prefix",
   readonly SerializableValue[],
 ];
+
+export type TreatyQueryScope = readonly ["scope", CacheScope];
 
 export type TreatyQueryParameterEntry = readonly [string, string];
 
@@ -54,7 +61,20 @@ export type TreatyQueryKey =
     ]
   | readonly [
       "treaty-query",
+      TreatyQueryScope,
+      readonly TreatyQueryPathSegment[],
+      TreatyQueryOperation,
+    ]
+  | readonly [
+      "treaty-query",
       TreatyQueryPrefix,
+      readonly TreatyQueryPathSegment[],
+      TreatyQueryOperation,
+    ]
+  | readonly [
+      "treaty-query",
+      TreatyQueryPrefix,
+      TreatyQueryScope,
       readonly TreatyQueryPathSegment[],
       TreatyQueryOperation,
     ];

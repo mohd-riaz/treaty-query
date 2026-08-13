@@ -20,6 +20,7 @@ import {
   type RouteSegment,
 } from "./route.js";
 import type {
+  CacheScope,
   GetQueryOptions,
   GetQueryOptionsInput,
   SerializableValue,
@@ -106,6 +107,7 @@ export type GetOperationOptions<
   TData = GetData<TMethod>,
 > = GetQueryOptionsInput<GetData<TMethod>, GetError<TMethod>, TData> & {
   readonly request?: GetRequest<TMethod>;
+  readonly cacheScope?: CacheScope | false;
 };
 
 type RequiresGetInput<TMethod> = MethodOptions<TMethod> extends {
@@ -177,6 +179,7 @@ export function createGetOperation<TMethod>(
   method: TMethod,
   route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
+  inheritedCacheScope?: CacheScope,
 ): GetOperation<TMethod> {
   if (typeof method !== "function") {
     throw new TypeError("Treaty route has no GET method.");
@@ -189,8 +192,16 @@ export function createGetOperation<TMethod>(
       options: GetOperationOptions<TMethod, TData> = {},
     ): GetQueryOptions<GetData<TMethod>, GetError<TMethod>, TData> {
       const semanticInput = input as TreatyQuerySemanticInput | undefined;
-      const { request, ...tanstackOptions } = options;
-      const queryKey = createGetKey(route, semanticInput, keyPrefix);
+      const { request, cacheScope, ...tanstackOptions } = options;
+      const resolvedCacheScope = cacheScope === false
+        ? undefined
+        : cacheScope ?? inheritedCacheScope;
+      const queryKey = createGetKey(
+        route,
+        semanticInput,
+        keyPrefix,
+        resolvedCacheScope,
+      );
       const queryFn = async (
         context: QueryFunctionContext<TreatyQueryKey>,
       ): Promise<GetData<TMethod>> =>
@@ -220,6 +231,7 @@ function createRouteProxy(
   client: unknown,
   route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
+  cacheScope: CacheScope | undefined,
 ): unknown {
   return new Proxy(function treatyQueryRoute(): void {}, {
     get(_target, property): unknown {
@@ -228,7 +240,7 @@ function createRouteProxy(
 
       if (property === "get") {
         const method = resolveRouteMethod(client, route, "get");
-        return createGetOperation(method, route, keyPrefix);
+        return createGetOperation(method, route, keyPrefix, cacheScope);
       }
 
       if (isMutationMethodName(property)) {
@@ -240,6 +252,7 @@ function createRouteProxy(
         client,
         appendRouteProperty(route, property),
         keyPrefix,
+        cacheScope,
       );
     },
     apply(_target, _thisArgument, argumentsList): unknown {
@@ -255,6 +268,7 @@ function createRouteProxy(
         client,
         appendRouteParameters(route, parameters),
         keyPrefix,
+        cacheScope,
       );
     },
   });
@@ -263,8 +277,14 @@ function createRouteProxy(
 export function createTreatyQueryHelpers<TClient>(
   client: TClient,
   keyPrefix: readonly SerializableValue[] | undefined,
+  cacheScope?: CacheScope,
 ): TreatyQueryHelpers<TClient> {
-  return createRouteProxy(client, [], keyPrefix) as TreatyQueryHelpers<TClient>;
+  return createRouteProxy(
+    client,
+    [],
+    keyPrefix,
+    cacheScope,
+  ) as TreatyQueryHelpers<TClient>;
 }
 
 /** @deprecated Use `GetData`. */

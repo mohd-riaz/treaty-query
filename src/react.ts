@@ -1,6 +1,7 @@
 import type { Treaty } from "@elysiajs/eden";
 import type { Elysia } from "elysia";
 import {
+  useQueryClient,
   useMutation,
   useQuery,
   type UseMutationResult,
@@ -14,6 +15,12 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+
+import {
+  normalizeCacheScope,
+  removeCacheScopeQueries,
+} from "./cache-scope.js";
+import { createKeyPrefix } from "./query-key.js";
 
 import {
   createMutationOperation,
@@ -41,6 +48,7 @@ import {
   type RouteSegment,
 } from "./route.js";
 import type {
+  CacheScope,
   SerializableValue,
 } from "./types.js";
 
@@ -87,6 +95,19 @@ export interface TreatyQueryProviderProps<TApp extends AnyElysia> {
 export type TreatyQueryProvider<TApp extends AnyElysia> = (
   props: TreatyQueryProviderProps<TApp>,
 ) => ReactElement;
+
+export interface CacheScopeProviderProps {
+  readonly value: CacheScope;
+  readonly children?: ReactNode;
+}
+
+export type CacheScopeProvider = (
+  props: CacheScopeProviderProps,
+) => ReactElement;
+
+export interface TreatyQueryUtils {
+  removeCacheScope(scope: CacheScope): void;
+}
 
 export interface RequiredUseQueryOperation<TMethod> {
   useQuery<TData = GetData<TMethod>>(
@@ -165,6 +186,7 @@ function isRouteParameters(value: unknown): value is RouteParameters {
 
 function createHookRouteProxy(
   clientContext: Context<unknown>,
+  cacheScopeContext: Context<CacheScope | undefined>,
   route: readonly RouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
 ): unknown {
@@ -180,6 +202,7 @@ function createHookRouteProxy(
             options?: GetOperationOptions<unknown, TData>,
           ): UseQueryResult<TData, Error> {
             const client = useContext(clientContext);
+            const inheritedCacheScope = useContext(cacheScopeContext);
 
             if (client === missingClient) {
               throw new Error(
@@ -188,7 +211,12 @@ function createHookRouteProxy(
             }
 
             const method = resolveRouteMethod(client, route, "get");
-            const operation = createGetOperation(method, route, keyPrefix);
+            const operation = createGetOperation(
+              method,
+              route,
+              keyPrefix,
+              inheritedCacheScope,
+            );
             const runtimeInput = input as unknown as GetInput<unknown>;
             const runtimeOptions = options as unknown as
               | GetOperationOptions<unknown, TData>
@@ -243,6 +271,7 @@ function createHookRouteProxy(
 
       return createHookRouteProxy(
         clientContext,
+        cacheScopeContext,
         appendRouteProperty(route, property),
         keyPrefix,
       );
@@ -258,6 +287,7 @@ function createHookRouteProxy(
 
       return createHookRouteProxy(
         clientContext,
+        cacheScopeContext,
         appendRouteParameters(route, parameters),
         keyPrefix,
       );
@@ -267,6 +297,8 @@ function createHookRouteProxy(
 
 export interface ReactTreatyQueryRuntime<TApp extends AnyElysia> {
   readonly Provider: TreatyQueryProvider<TApp>;
+  readonly CacheScope: CacheScopeProvider;
+  readonly useUtils: () => TreatyQueryUtils;
   readonly routes: TreatyQueryHooks<Treaty.Create<TApp>>;
 }
 
@@ -274,6 +306,8 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
   keyPrefix: readonly SerializableValue[] | undefined,
 ): ReactTreatyQueryRuntime<TApp> {
   const clientContext = createContext<unknown>(missingClient);
+  const cacheScopeContext = createContext<CacheScope | undefined>(undefined);
+  const prefix = createKeyPrefix(keyPrefix);
 
   function Provider(
     props: TreatyQueryProviderProps<TApp>,
@@ -285,10 +319,40 @@ export function createReactTreatyQueryRuntime<TApp extends AnyElysia>(
     );
   }
 
+  function CacheScopeComponent(
+    props: CacheScopeProviderProps,
+  ): ReactElement {
+    return createElement(
+      cacheScopeContext.Provider,
+      { value: normalizeCacheScope(props.value) },
+      props.children,
+    );
+  }
+
+  function useUtils(): TreatyQueryUtils {
+    const client = useContext(clientContext);
+    const queryClient = useQueryClient();
+
+    if (client === missingClient) {
+      throw new Error(
+        "Treaty Query utilities must be used inside this tq.Provider.",
+      );
+    }
+
+    return {
+      removeCacheScope(scope: CacheScope): void {
+        removeCacheScopeQueries(queryClient, prefix, scope);
+      },
+    };
+  }
+
   return {
     Provider,
+    CacheScope: CacheScopeComponent,
+    useUtils,
     routes: createHookRouteProxy(
       clientContext,
+      cacheScopeContext,
       [],
       keyPrefix,
     ) as TreatyQueryHooks<Treaty.Create<TApp>>,
