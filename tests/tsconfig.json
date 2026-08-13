@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "isolatedDeclarations": false,
+    "types": ["bun"]
+  },
+  "include": ["./scaffold.test.ts"],
+  "exclude": ["./consumer"]
+}

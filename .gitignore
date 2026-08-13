@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tgz
+.DS_Store
+tests/consumer/bun.lock
+tests/consumer/node_modules/
+
