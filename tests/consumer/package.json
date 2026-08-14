@@ -10,7 +10,7 @@
     "@tanstack/react-query": "5.101.4",
     "elysia": "1.4.29",
     "react": "19.2.8",
-    "treaty-query": "file:../../treaty-query-0.1.1.tgz",
+    "treaty-query": "file:../../treaty-query-0.2.0.tgz",
     "typescript": "5.9.2"
   }
 }

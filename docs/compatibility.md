@@ -1,12 +1,12 @@
 # Compatibility
 
 The automated package-consumer fixtures install the packed tarball and use only
-its public export. The following combinations are verified for `0.1.1`:
+its public export. The following combinations are verified for `0.2.0`:
 
-| Fixture | Elysia | Eden Treaty | TanStack React Query | React |
-| --- | --- | --- | --- | --- |
-| Declared lower bounds | 1.4.19 | 1.4.9 | 5.101.4 | 18.2.0 |
-| Project baseline | 1.4.29 | 1.4.9 | 5.101.4 | 19.2.8 |
+| Fixture               | Elysia | Eden Treaty | TanStack React Query | React  |
+| --------------------- | ------ | ----------- | -------------------- | ------ |
+| Declared lower bounds | 1.4.19 | 1.4.9       | 5.101.4              | 18.2.0 |
+| Project baseline      | 1.4.29 | 1.4.9       | 5.101.4              | 19.2.8 |
 
 Both fixtures type-check compiled declarations and execute GET queries,
 dynamic paths, and mutations from the packed package. The lower-bound fixture

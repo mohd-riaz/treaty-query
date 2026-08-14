@@ -18,6 +18,18 @@ if (!(await archive.exists())) {
 }
 
 const bundle = await Bun.file("dist/index.mjs").text();
+const runtimeModule: unknown = await import("../dist/index.mjs");
+if (
+  typeof runtimeModule !== "object" ||
+  runtimeModule === null ||
+  !("version" in runtimeModule) ||
+  runtimeModule.version !== packageMetadata.version
+) {
+  throw new Error(
+    `The runtime version export does not match package.json ${packageMetadata.version}.`,
+  );
+}
+
 for (const peer of ["@tanstack/react-query", "react"]) {
   if (!bundle.includes(`from \"${peer}\"`)) {
     throw new Error(`The runtime bundle no longer externalizes ${peer}.`);

@@ -1,6 +1,6 @@
 {
   "name": "treaty-query",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "tRPC-style TanStack Query DX for official Elysia Treaty clients.",
   "type": "module",
   "sideEffects": false,
