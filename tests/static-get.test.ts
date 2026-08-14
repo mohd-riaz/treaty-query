@@ -360,7 +360,7 @@ describe("static GET query options", () => {
       prefixed.health.get.queryOptions().queryKey as readonly unknown[],
     ).toEqual([
       "treaty-query",
-      ["prefix", ["acme-api", 2]],
+      { kind: "treaty-query-prefix", value: ["acme-api", 2] },
       ["health"],
       { kind: "query", method: "GET" },
     ]);

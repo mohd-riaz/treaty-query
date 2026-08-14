@@ -28,6 +28,29 @@ calls append a parameter segment at their exact route position; request
 execution replays those calls against the official Treaty client. Keys encode
 sorted parameter entries and normalize numeric URL parameters to strings.
 
+React hook routes also expose inferred `$parameterName` properties for dynamic
+paths. These properties append parameter-name metadata without calling a route
+function during render. The hook input resolves that metadata from `params`
+into the same immutable parameter segments used by the legacy callable route
+syntax, after which key construction and Treaty execution share the existing
+path.
+
+Consecutive marker properties represent one Treaty dynamic-route call. Multiple
+dynamic route groups accept either one flat object when parameter names are
+unique or an ordered tuple of per-group objects when names repeat. Hook-proxy
+property results are cached per route proxy, so static and marker-based chains
+return stable terminal hook wrappers. Legacy render-time route calls remain
+available for compatibility, but their returned proxy depends on runtime
+values and is therefore not statically verifiable by React Compiler.
+
+React hook options may replace the final `queryKey` or `mutationKey`
+immediately before the options object is passed to TanStack. Request resolution
+and result inference still use the canonical Treaty operation, but a custom
+query key is outside the library namespace and intentionally invisible to
+route utilities, scope removal, and helper-generated cache keys.
+Framework-neutral helper factories do not accept overrides and remain the
+canonical key source.
+
 Semantic query input is passed to Treaty and stored as a plain value under the
 operation's `input` key. Transport-only headers and fetch options live under
 the caller's `request` option, are removed before passing options to TanStack,
@@ -51,11 +74,14 @@ changing the Treaty client provider. Bound helpers can carry the same default,
 and a query-level value overrides either source; `false` explicitly disables
 inheritance.
 
-Scoped GET keys place an immutable `["scope", value]` marker after the optional
-application prefix and before the route. Scope values are validated and
-snapshotted as strings, finite numbers, or non-empty readonly serializable
-tuples. Route parameters and semantic input keep their existing key positions.
-Mutations remain unscoped.
+Scoped GET keys place an immutable tagged scope object after the optional
+application prefix and before the route. Prefix metadata is tagged the same
+way with a distinct kind. Metadata is therefore always an object while a route
+path is always an array, preventing literal routes such as `/scope/admin` from
+colliding with metadata during TanStack's partial-key matching. Scope values
+are validated and snapshotted as strings, finite numbers, or non-empty readonly
+serializable tuples. Route parameters and semantic input keep their existing
+key positions. Mutations remain unscoped.
 
 `tq.useUtils().removeCacheScope(scope)` removes query-cache entries only when
 the key has this library's namespace, this instance's exact optional prefix,

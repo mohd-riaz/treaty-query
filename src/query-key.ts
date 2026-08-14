@@ -23,7 +23,10 @@ export function createKeyPrefix(
 ): TreatyQueryPrefix | undefined {
   return keyPrefix === undefined
     ? undefined
-    : Object.freeze(["prefix", Object.freeze([...keyPrefix])]);
+    : Object.freeze({
+        kind: "treaty-query-prefix" as const,
+        value: Object.freeze([...keyPrefix]),
+      });
 }
 
 function createParameterKey(

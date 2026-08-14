@@ -64,7 +64,7 @@ describe("cache scope option factories", () => {
 
     expect(userAOptions.queryKey as readonly unknown[]).toEqual([
       "treaty-query",
-      ["scope", "user-a"],
+      { kind: "treaty-query-scope", value: "user-a" },
       ["account", "access"],
       { kind: "query", method: "GET" },
     ]);
@@ -123,7 +123,7 @@ describe("cache scope option factories", () => {
       }).queryKey as readonly unknown[],
     ).toEqual([
       "treaty-query",
-      ["scope", "override"],
+      { kind: "treaty-query-scope", value: "override" },
       ["account", "access"],
       { kind: "query", method: "GET" },
     ]);
@@ -147,8 +147,8 @@ describe("cache scope option factories", () => {
       prefixed.account.access.get.queryOptions().queryKey as readonly unknown[],
     ).toEqual([
       "treaty-query",
-      ["prefix", ["admin-api"]],
-      ["scope", "parent"],
+      { kind: "treaty-query-prefix", value: ["admin-api"] },
+      { kind: "treaty-query-scope", value: "parent" },
       ["account", "access"],
       { kind: "query", method: "GET" },
     ]);
@@ -169,14 +169,17 @@ describe("cache scope option factories", () => {
 
     expect(options.queryKey as readonly unknown[]).toEqual([
       "treaty-query",
-      ["scope", ["user", { id: "user-a" }, 2]],
+      {
+        kind: "treaty-query-scope",
+        value: ["user", { id: "user-a" }, 2],
+      },
       ["account", "access"],
       { kind: "query", method: "GET" },
     ]);
     expect(Object.isFrozen(options.queryKey[1])).toBe(true);
-    expect(Object.isFrozen((options.queryKey[1] as readonly unknown[])[1])).toBe(
-      true,
-    );
+    expect(Object.isFrozen(
+      (options.queryKey[1] as { readonly value: unknown }).value,
+    )).toBe(true);
   });
 
   test("retains path parameters and query input normally", () => {
@@ -190,7 +193,7 @@ describe("cache scope option factories", () => {
 
     expect(options.queryKey as readonly unknown[]).toEqual([
       "treaty-query",
-      ["scope", "user-a"],
+      { kind: "treaty-query-scope", value: "user-a" },
       ["organizations", ["$params", [["organizationId", "org-1"]]], "access"],
       {
         kind: "query",

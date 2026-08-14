@@ -19,12 +19,15 @@ export type CacheScope =
   | number
   | readonly [SerializableValue, ...SerializableValue[]];
 
-export type TreatyQueryPrefix = readonly [
-  "prefix",
-  readonly SerializableValue[],
-];
+export interface TreatyQueryPrefix {
+  readonly kind: "treaty-query-prefix";
+  readonly value: readonly SerializableValue[];
+}
 
-export type TreatyQueryScope = readonly ["scope", CacheScope];
+export interface TreatyQueryScope {
+  readonly kind: "treaty-query-scope";
+  readonly value: CacheScope;
+}
 
 export type TreatyQueryParameterEntry = readonly [string, string];
 

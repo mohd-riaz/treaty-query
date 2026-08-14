@@ -45,7 +45,22 @@ const app = new Elysia()
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
   })
+  .get("/scope/admin", () => ({ route: "public-scope-admin" as const }))
   .get("/products/:id", ({ params }) => ({ id: params.id }))
+  .get(
+    "/organizations/:organizationId/orders/:orderId",
+    ({ params }) => ({
+      organizationId: params.organizationId,
+      orderId: params.orderId,
+    }),
+  )
+  .patch(
+    "/products/:id",
+    ({ params, body }) => ({ id: params.id, name: body.name }),
+    {
+      body: t.Object({ name: t.String() }),
+    },
+  )
   .post(
     "/products",
     ({ body }) => ({ id: "created-1", name: body.name, price: body.price }),
@@ -74,7 +89,22 @@ const alternateApp = new Elysia()
   .get("/search", ({ query }) => ({ term: query.term }), {
     query: t.Object({ term: t.String() }),
   })
+  .get("/scope/admin", () => ({ route: "alternate-scope-admin" as const }))
   .get("/products/:id", ({ params }) => ({ id: params.id }))
+  .get(
+    "/organizations/:organizationId/orders/:orderId",
+    ({ params }) => ({
+      organizationId: params.organizationId,
+      orderId: params.orderId,
+    }),
+  )
+  .patch(
+    "/products/:id",
+    ({ params, body }) => ({ id: params.id, name: body.name }),
+    {
+      body: t.Object({ name: t.String() }),
+    },
+  )
   .post(
     "/products",
     ({ body }) => ({ id: "alternate-1", name: body.name, price: body.price }),
@@ -183,6 +213,36 @@ describe("React static GET useQuery", () => {
     );
 
     await waitFor(() => expect(selected).toBe("up"));
+  });
+
+  test("lets React queries replace the generated query key", async () => {
+    const queryClient = createQueryClient();
+    const queryKey = ["application-cache", "product", 7] as const;
+    let productData: { id: string } | undefined;
+
+    function Probe(): null {
+      productData = tq.products.$id.get.useQuery(
+        { params: { id: 7 } },
+        { queryKey },
+      ).data;
+      return null;
+    }
+
+    render(
+      <Providers queryClient={queryClient}>
+        <Probe />
+      </Providers>,
+    );
+
+    await waitFor(() => expect(productData).toEqual({ id: "7" }));
+
+    const generatedKey = tq.createHelpers({ client })
+      .products({ id: 7 }).get.queryOptions().queryKey;
+
+    expect(queryClient.getQueryData<{ id: string }>(queryKey)).toEqual({
+      id: "7",
+    });
+    expect(queryClient.getQueryData(generatedKey)).toBeUndefined();
   });
 
   test("surfaces TreatyQueryError in the hook error state", async () => {
@@ -299,6 +359,152 @@ describe("React static GET useQuery", () => {
     }
   });
 
+  test("keeps compiler-safe dynamic query hooks on a static property chain", async () => {
+    const queryClient = createQueryClient();
+    let productData: { id: string } | undefined;
+    let orderData:
+      | { organizationId: string; orderId: string }
+      | undefined;
+
+    function Probe(): null {
+      productData = tq.products.$id.get.useQuery({
+        params: { id: 7 },
+      }).data;
+      orderData = tq.organizations.$organizationId.orders.$orderId.get
+        .useQuery({
+          params: { organizationId: "org-1", orderId: "order-9" },
+        }).data;
+      return null;
+    }
+
+    render(
+      <Providers queryClient={queryClient}>
+        <Probe />
+      </Providers>,
+    );
+
+    await waitFor(() => {
+      expect(productData).toEqual({ id: "7" });
+      expect(orderData).toEqual({
+        organizationId: "org-1",
+        orderId: "order-9",
+      });
+    });
+
+    expect(
+      queryClient.getQueryCache().getAll().map((query) => query.queryKey),
+    ).toContainEqual([
+      "treaty-query",
+      ["products", ["$params", [["id", "7"]]]],
+      { kind: "query", method: "GET" },
+    ]);
+
+    if (false) {
+      // @ts-expect-error Compiler-safe dynamic routes require params.
+      tq.products.$id.get.useQuery();
+      tq.products.$id.get.useQuery({
+        // @ts-expect-error The inferred dynamic parameter name is id.
+        params: { productId: 7 },
+      });
+      // @ts-expect-error Parameter marker names come from the Treaty route.
+      tq.products.$productId.get.useQuery({ params: { productId: 7 } });
+    }
+  });
+
+  test("keeps compiler-safe dynamic mutation hooks on a static property chain", async () => {
+    const queryClient = createQueryClient();
+    let mutate:
+      | ((body: { name: string }) => Promise<{ id: string; name: string }>)
+      | undefined;
+    let callbackId: string | undefined;
+    let latestStatus: string | undefined;
+
+    function Probe(): null {
+      const mutation = tq.products.$id.patch.useMutation({
+        params: { id: 11 },
+        onSuccess(data, body) {
+          callbackId = `${data.id}:${body.name}`;
+        },
+      });
+      mutate = mutation.mutateAsync;
+      latestStatus = mutation.status;
+      return null;
+    }
+
+    render(
+      <Providers queryClient={queryClient}>
+        <Probe />
+      </Providers>,
+    );
+
+    let result: { id: string; name: string } | undefined;
+    await act(async () => {
+      result = await mutate?.({ name: "Updated" });
+    });
+
+    await waitFor(() => expect(latestStatus).toBe("success"));
+
+    expect(result).toEqual({ id: "11", name: "Updated" });
+    expect(callbackId).toBe("11:Updated");
+    expect(
+      queryClient.getMutationCache().getAll()[0]?.options.mutationKey,
+    ).toEqual([
+      "treaty-query",
+      ["products", ["$params", [["id", "11"]]]],
+      { kind: "mutation", method: "PATCH" },
+    ]);
+
+    if (false) {
+      // @ts-expect-error Compiler-safe dynamic mutations require params.
+      tq.products.$id.patch.useMutation();
+    }
+  });
+
+  test("lets React mutations replace the generated mutation key", async () => {
+    const queryClient = createQueryClient();
+    const mutationKey = ["application-mutations", "product", 12] as const;
+    let mutate:
+      | ((body: { name: string }) => Promise<{ id: string; name: string }>)
+      | undefined;
+    let latestStatus: string | undefined;
+
+    function Probe(): null {
+      const mutation = tq.products.$id.patch.useMutation({
+        params: { id: 12 },
+        mutationKey,
+      });
+      mutate = mutation.mutateAsync;
+      latestStatus = mutation.status;
+      return null;
+    }
+
+    render(
+      <Providers queryClient={queryClient}>
+        <Probe />
+      </Providers>,
+    );
+
+    await act(async () => {
+      await mutate?.({ name: "Custom key" });
+    });
+
+    await waitFor(() => expect(latestStatus).toBe("success"));
+    expect(
+      queryClient.getMutationCache().getAll()[0]?.options.mutationKey,
+    ).toEqual(mutationKey);
+  });
+
+  test("returns stable hook functions for compiler-safe property chains", () => {
+    expect(tq.health.get.useQuery).toBe(tq.health.get.useQuery);
+    expect(tq.products.post.useMutation).toBe(tq.products.post.useMutation);
+    expect(tq.products.$id.get.useQuery).toBe(
+      tq.products.$id.get.useQuery,
+    );
+    expect(tq.products.$id.patch.useMutation).toBe(
+      tq.products.$id.patch.useMutation,
+    );
+  });
+
   test("executes a typed body mutation through the shared factory", async () => {
     const queryClient = createQueryClient();
     let mutate:
@@ -390,19 +596,22 @@ describe("React static GET useQuery", () => {
       .map((query) => query.queryKey);
     expect(keys).toContainEqual([
       "treaty-query",
-      ["scope", "parent"],
+      { kind: "treaty-query-scope", value: "parent" },
       ["health"],
       { kind: "query", method: "GET" },
     ]);
     expect(keys).toContainEqual([
       "treaty-query",
-      ["scope", ["user", { id: "child" }]],
+      {
+        kind: "treaty-query-scope",
+        value: ["user", { id: "child" }],
+      },
       ["health"],
       { kind: "query", method: "GET" },
     ]);
     expect(keys).toContainEqual([
       "treaty-query",
-      ["scope", "per-query"],
+      { kind: "treaty-query-scope", value: "per-query" },
       ["health"],
       { kind: "query", method: "GET" },
     ]);
@@ -463,6 +672,112 @@ describe("React static GET useQuery", () => {
       "other-prefix",
     );
     expect(queryClient.getQueryData<string>(unrelated)).toBe("unrelated");
+  });
+
+  test("keeps literal /scope/admin routes distinct from scope metadata", async () => {
+    const queryClient = createQueryClient();
+    const helpers = tq.createHelpers({ client });
+    const scopedHelpers = tq.createHelpers({ client, cacheScope: "admin" });
+    const publicRoute = helpers.scope.admin.get.queryOptions();
+    const scopedProduct = scopedHelpers.products({ id: 7 }).get.queryOptions();
+    let utils: TreatyQueryUtils<typeof client> | undefined;
+
+    queryClient.setQueryData(publicRoute.queryKey, {
+      route: "public-scope-admin",
+    });
+    queryClient.setQueryData(scopedProduct.queryKey, { id: "7" });
+
+    function Probe(): null {
+      utils = tq.useUtils();
+      return null;
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <tq.Provider client={client}>
+          <Probe />
+        </tq.Provider>
+      </QueryClientProvider>,
+    );
+
+    if (utils === undefined) throw new Error("Expected utilities.");
+    const resolvedUtils = utils;
+
+    await act(async () => {
+      await resolvedUtils.scope.admin.invalidate({ refetchType: "none" });
+    });
+
+    expect(queryClient.getQueryCache().find({
+      queryKey: publicRoute.queryKey,
+      exact: true,
+    })?.state.isInvalidated).toBe(true);
+    expect(queryClient.getQueryCache().find({
+      queryKey: scopedProduct.queryKey,
+      exact: true,
+    })?.state.isInvalidated).toBe(false);
+
+    act(() => resolvedUtils.removeCacheScope("admin"));
+
+    expect(queryClient.getQueryData<{
+      readonly route: "public-scope-admin";
+    }>(publicRoute.queryKey)).toEqual({ route: "public-scope-admin" });
+    expect(queryClient.getQueryData(scopedProduct.queryKey)).toBeUndefined();
+  });
+
+  test("keeps prefixed literal scope routes distinct from scope metadata", async () => {
+    const queryClient = createQueryClient();
+    const prefixedTq = createTreatyQuery<typeof app>({
+      keyPrefix: ["admin-api"],
+    });
+    const helpers = prefixedTq.createHelpers({ client });
+    const scopedHelpers = prefixedTq.createHelpers({
+      client,
+      cacheScope: "admin",
+    });
+    const publicRoute = helpers.scope.admin.get.queryOptions();
+    const scopedProduct = scopedHelpers.products({ id: 7 }).get.queryOptions();
+    let utils: TreatyQueryUtils<typeof client> | undefined;
+
+    queryClient.setQueryData(publicRoute.queryKey, {
+      route: "public-scope-admin",
+    });
+    queryClient.setQueryData(scopedProduct.queryKey, { id: "7" });
+
+    function Probe(): null {
+      utils = prefixedTq.useUtils();
+      return null;
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <prefixedTq.Provider client={client}>
+          <Probe />
+        </prefixedTq.Provider>
+      </QueryClientProvider>,
+    );
+
+    if (utils === undefined) throw new Error("Expected utilities.");
+    const resolvedUtils = utils;
+
+    await act(async () => {
+      await resolvedUtils.scope.admin.invalidate({ refetchType: "none" });
+    });
+
+    expect(queryClient.getQueryCache().find({
+      queryKey: publicRoute.queryKey,
+      exact: true,
+    })?.state.isInvalidated).toBe(true);
+    expect(queryClient.getQueryCache().find({
+      queryKey: scopedProduct.queryKey,
+      exact: true,
+    })?.state.isInvalidated).toBe(false);
+
+    act(() => resolvedUtils.removeCacheScope("admin"));
+
+    expect(queryClient.getQueryData<{
+      readonly route: "public-scope-admin";
+    }>(publicRoute.queryKey)).toEqual({ route: "public-scope-admin" });
+    expect(queryClient.getQueryData(scopedProduct.queryKey)).toBeUndefined();
   });
 
   test("provides typed exact cache reads, writes, keys, and ensureData", async () => {
@@ -591,7 +906,7 @@ describe("React static GET useQuery", () => {
 
     expect(utils.products.queryKey()).toEqual([
       "treaty-query",
-      ["scope", "user-a"],
+      { kind: "treaty-query-scope", value: "user-a" },
       ["products"],
     ]);
 

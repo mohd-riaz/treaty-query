@@ -32,3 +32,17 @@ types are tightly coupled.
 The package's strict checks use `skipLibCheck: true`. This avoids known errors
 inside Elysia's published declarations while keeping Treaty Query's own source,
 tests, and emitted declarations strictly checked.
+
+## React Compiler
+
+Current source tests compile static query and mutation chains plus dynamic
+`$parameterName` chains with `babel-plugin-react-compiler` 1.0.0 and Babel
+7.29.0. The plugin is a development-only test dependency, not a runtime peer.
+
+The legacy hook form with a render-time route call, such as
+`tq.products({ id }).patch.useMutation()`, remains runtime compatible. React
+Compiler rejects that form because it cannot prove the dynamically obtained
+hook function is the same on every render. Use
+`tq.products.$id.patch.useMutation({ params: { id } })` in compiled React
+components. Helpers and cache utilities continue to use Treaty's natural
+callable route syntax.

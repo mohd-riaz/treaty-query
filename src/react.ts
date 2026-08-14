@@ -4,6 +4,8 @@ import {
   useQueryClient,
   useMutation,
   useQuery,
+  type MutationKey,
+  type QueryKey,
   type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
@@ -44,9 +46,6 @@ import {
   type QueryError,
 } from "./static-helpers.js";
 import {
-  appendEscapedRouteProperty,
-  appendRouteParameters,
-  appendRouteProperty,
   routeSegment,
   resolveRouteMethod,
   type RouteParameters,
@@ -66,6 +65,35 @@ type UnsupportedTerminalMethod =
   | "connect"
   | "subscribe";
 
+interface HookRouteParameterNamesSegment {
+  readonly kind: "parameter-names";
+  readonly value: readonly string[];
+}
+
+type HookRouteSegment = RouteSegment | HookRouteParameterNamesSegment;
+type HookRouteParameterGroups = readonly RouteParameters[];
+
+type AppendRouteParameterGroup<
+  TGroups extends HookRouteParameterGroups,
+  TParameters extends RouteParameters,
+> = readonly [...TGroups, TParameters];
+
+type UnionToIntersection<TValue> = (
+  TValue extends unknown ? (value: TValue) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never;
+
+type CombinedRouteParameters<TGroups extends HookRouteParameterGroups> =
+  UnionToIntersection<TGroups[number]>;
+
+type HookRouteParameterInput<TGroups extends HookRouteParameterGroups> =
+  TGroups extends readonly []
+    ? never
+    : TGroups extends readonly [infer TOnly extends RouteParameters]
+      ? TOnly
+      : CombinedRouteParameters<TGroups> | TGroups;
+
 const missingClient = Symbol("treaty-query-missing-client");
 
 type MethodOptions<TMethod> = TMethod extends (
@@ -80,6 +108,36 @@ type RequiresGetInput<TMethod> = MethodOptions<TMethod> extends {
 }
   ? true
   : false;
+
+type HookQueryInput<
+  TMethod,
+  TRouteParameters extends HookRouteParameterGroups,
+> = TRouteParameters extends readonly []
+  ? GetInput<TMethod>
+  : GetInput<TMethod> extends undefined
+    ? { readonly params: HookRouteParameterInput<TRouteParameters> }
+    : GetInput<TMethod> & {
+        readonly params: HookRouteParameterInput<TRouteParameters>;
+      };
+
+type HookMutationOptions<
+  TMethod,
+  TOnMutateResult,
+  TMappedError extends Error | undefined,
+  TRouteParameters extends HookRouteParameterGroups,
+> = MutationOperationOptions<TMethod, TOnMutateResult, TMappedError> &
+  { readonly mutationKey?: MutationKey } &
+  (TRouteParameters extends readonly []
+    ? unknown
+    : { readonly params: HookRouteParameterInput<TRouteParameters> });
+
+type HookQueryOptions<
+  TMethod,
+  TData,
+  TMappedError extends Error | undefined,
+> = GetOperationOptions<TMethod, TData, TMappedError> & {
+  readonly queryKey?: QueryKey;
+};
 
 type HookRoutePropertyKey<TNode, TKey> = TKey extends string
   ? TKey extends "~path" | "then" | "catch" | "finally"
@@ -114,37 +172,48 @@ export type CacheScopeProvider = (
 export interface RequiredUseQueryOperation<
   TMethod,
   TMappedError extends Error | undefined = undefined,
+  TRouteParameters extends HookRouteParameterGroups = readonly [],
 > {
   useQuery<TData = GetData<TMethod>>(
-    input: GetInput<TMethod>,
-    options?: GetOperationOptions<TMethod, TData, TMappedError>,
+    input: HookQueryInput<TMethod, TRouteParameters>,
+    options?: HookQueryOptions<TMethod, TData, TMappedError>,
   ): UseQueryResult<TData, QueryError<TMethod, TMappedError>>;
 }
 
 export interface OptionalUseQueryOperation<
   TMethod,
   TMappedError extends Error | undefined = undefined,
+  TRouteParameters extends HookRouteParameterGroups = readonly [],
 > {
   useQuery<TData = GetData<TMethod>>(
-    input?: GetInput<TMethod>,
-    options?: GetOperationOptions<TMethod, TData, TMappedError>,
+    input?: HookQueryInput<TMethod, TRouteParameters>,
+    options?: HookQueryOptions<TMethod, TData, TMappedError>,
   ): UseQueryResult<TData, QueryError<TMethod, TMappedError>>;
 }
 
 export type UseQueryOperation<
   TMethod,
   TMappedError extends Error | undefined = undefined,
+  TRouteParameters extends HookRouteParameterGroups = readonly [],
 > =
-  RequiresGetInput<TMethod> extends true
-    ? RequiredUseQueryOperation<TMethod, TMappedError>
-    : OptionalUseQueryOperation<TMethod, TMappedError>;
+  TRouteParameters extends readonly []
+    ? RequiresGetInput<TMethod> extends true
+      ? RequiredUseQueryOperation<TMethod, TMappedError, TRouteParameters>
+      : OptionalUseQueryOperation<TMethod, TMappedError, TRouteParameters>
+    : RequiredUseQueryOperation<TMethod, TMappedError, TRouteParameters>;
 
 export interface RequiredUseMutationOperation<
   TMethod,
   TMappedError extends Error | undefined = undefined,
+  TRouteParameters extends HookRouteParameterGroups = readonly [],
 > {
   useMutation<TOnMutateResult = unknown>(
-    options: MutationOperationOptions<TMethod, TOnMutateResult, TMappedError>,
+    options: HookMutationOptions<
+      TMethod,
+      TOnMutateResult,
+      TMappedError,
+      TRouteParameters
+    >,
   ): UseMutationResult<
     MutationData<TMethod>,
     MutationError<TMethod, TMappedError>,
@@ -156,9 +225,15 @@ export interface RequiredUseMutationOperation<
 export interface OptionalUseMutationOperation<
   TMethod,
   TMappedError extends Error | undefined = undefined,
+  TRouteParameters extends HookRouteParameterGroups = readonly [],
 > {
   useMutation<TOnMutateResult = unknown>(
-    options?: MutationOperationOptions<TMethod, TOnMutateResult, TMappedError>,
+    options?: HookMutationOptions<
+      TMethod,
+      TOnMutateResult,
+      TMappedError,
+      TRouteParameters
+    >,
   ): UseMutationResult<
     MutationData<TMethod>,
     MutationError<TMethod, TMappedError>,
@@ -170,39 +245,96 @@ export interface OptionalUseMutationOperation<
 export type UseMutationOperation<
   TMethod,
   TMappedError extends Error | undefined = undefined,
+  TRouteParameters extends HookRouteParameterGroups = readonly [],
 > =
-  {} extends MutationRequest<TMethod>
-    ? OptionalUseMutationOperation<TMethod, TMappedError>
-    : RequiredUseMutationOperation<TMethod, TMappedError>;
+  TRouteParameters extends readonly []
+    ? {} extends MutationRequest<TMethod>
+      ? OptionalUseMutationOperation<TMethod, TMappedError, TRouteParameters>
+      : RequiredUseMutationOperation<TMethod, TMappedError, TRouteParameters>
+    : RequiredUseMutationOperation<TMethod, TMappedError, TRouteParameters>;
 
-type HookRouteProperties<TNode, TMappedError extends Error | undefined> = {
+type HookRouteProperties<
+  TNode,
+  TMappedError extends Error | undefined,
+  TRouteParameters extends HookRouteParameterGroups,
+> = {
   readonly [TKey in keyof TNode as HookRoutePropertyKey<TNode, TKey>]:
     TKey extends "get"
-      ? UseQueryOperation<TNode[TKey], TMappedError>
+      ? UseQueryOperation<TNode[TKey], TMappedError, TRouteParameters>
       : TKey extends "post" | "put" | "patch" | "delete"
-        ? UseMutationOperation<TNode[TKey], TMappedError>
-      : TreatyQueryHooks<TNode[TKey], TMappedError>;
+        ? UseMutationOperation<TNode[TKey], TMappedError, TRouteParameters>
+      : TreatyQueryHooks<TNode[TKey], TMappedError, TRouteParameters>;
 };
 
-type DynamicHookRoute<TNode, TMappedError extends Error | undefined> = TNode extends (
-  parameters: infer TParameters,
-) => infer TResult
-  ? (parameters: TParameters) => TreatyQueryHooks<TResult, TMappedError>
+type DynamicHookRoute<
+  TNode,
+  TMappedError extends Error | undefined,
+  TRouteParameters extends HookRouteParameterGroups,
+> = TNode extends (parameters: infer TParameters) => infer TResult
+  ? (parameters: TParameters) => TreatyQueryHooks<
+      TResult,
+      TMappedError,
+      TRouteParameters
+    >
   : unknown;
 
-type EscapedHookRoute<TNode, TMappedError extends Error | undefined> = {
+type DynamicParameterMarkers<
+  TResult,
+  TParameters extends RouteParameters,
+  TMappedError extends Error | undefined,
+  TRouteParameters extends HookRouteParameterGroups,
+  TRemaining extends keyof TParameters & string = keyof TParameters & string,
+> = {
+  readonly [TKey in TRemaining as `$${TKey}`]:
+    Exclude<TRemaining, TKey> extends never
+      ? TreatyQueryHooks<
+          TResult,
+          TMappedError,
+          AppendRouteParameterGroup<TRouteParameters, TParameters>
+        >
+      : DynamicParameterMarkers<
+          TResult,
+          TParameters,
+          TMappedError,
+          TRouteParameters,
+          Exclude<TRemaining, TKey>
+        >;
+};
+
+type DynamicHookParameterProperties<
+  TNode,
+  TMappedError extends Error | undefined,
+  TRouteParameters extends HookRouteParameterGroups,
+> = TNode extends (parameters: infer TParameters) => infer TResult
+  ? TParameters extends RouteParameters
+    ? DynamicParameterMarkers<
+        TResult,
+        TParameters,
+        TMappedError,
+        TRouteParameters
+      >
+    : unknown
+  : unknown;
+
+type EscapedHookRoute<
+  TNode,
+  TMappedError extends Error | undefined,
+  TRouteParameters extends HookRouteParameterGroups,
+> = {
   readonly [routeSegment]: <TKey extends keyof TNode & string>(
     segment: TKey,
-  ) => TreatyQueryHooks<TNode[TKey], TMappedError>;
+  ) => TreatyQueryHooks<TNode[TKey], TMappedError, TRouteParameters>;
 };
 
 export type TreatyQueryHooks<
   TNode,
   TMappedError extends Error | undefined = undefined,
+  TRouteParameters extends HookRouteParameterGroups = readonly [],
 > =
-  & DynamicHookRoute<TNode, TMappedError>
-  & EscapedHookRoute<TNode, TMappedError>
-  & HookRouteProperties<TNode, TMappedError>;
+  & DynamicHookRoute<TNode, TMappedError, TRouteParameters>
+  & DynamicHookParameterProperties<TNode, TMappedError, TRouteParameters>
+  & EscapedHookRoute<TNode, TMappedError, TRouteParameters>
+  & HookRouteProperties<TNode, TMappedError, TRouteParameters>;
 
 function isRouteParameters(value: unknown): value is RouteParameters {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -214,17 +346,199 @@ function isRouteParameters(value: unknown): value is RouteParameters {
   );
 }
 
+function appendHookRouteProperty(
+  route: readonly HookRouteSegment[],
+  property: string,
+): readonly HookRouteSegment[] {
+  return Object.freeze([...route, property]);
+}
+
+function appendEscapedHookRouteProperty(
+  route: readonly HookRouteSegment[],
+  property: string,
+): readonly HookRouteSegment[] {
+  return Object.freeze([
+    ...route,
+    Object.freeze({ kind: "escaped" as const, value: property }),
+  ]);
+}
+
+function appendHookRouteParameters(
+  route: readonly HookRouteSegment[],
+  parameters: RouteParameters,
+): readonly HookRouteSegment[] {
+  return Object.freeze([
+    ...route,
+    Object.freeze({
+      kind: "parameters" as const,
+      value: Object.freeze({ ...parameters }),
+    }),
+  ]);
+}
+
+function appendHookParameterName(
+  route: readonly HookRouteSegment[],
+  name: string,
+): readonly HookRouteSegment[] {
+  const previous = route.at(-1);
+
+  if (
+    typeof previous !== "string" &&
+    previous?.kind === "parameter-names"
+  ) {
+    return Object.freeze([
+      ...route.slice(0, -1),
+      Object.freeze({
+        kind: "parameter-names" as const,
+        value: Object.freeze([...previous.value, name]),
+      }),
+    ]);
+  }
+
+  return Object.freeze([
+    ...route,
+    Object.freeze({
+      kind: "parameter-names" as const,
+      value: Object.freeze([name]),
+    }),
+  ]);
+}
+
+function resolveHookRoute(
+  route: readonly HookRouteSegment[],
+  parameters: unknown,
+): readonly RouteSegment[] {
+  const resolved: RouteSegment[] = [];
+  let parameterGroupIndex = 0;
+
+  for (const segment of route) {
+    if (
+      typeof segment === "string" ||
+      segment.kind !== "parameter-names"
+    ) {
+      resolved.push(segment);
+      continue;
+    }
+
+    const parameterSource = Array.isArray(parameters)
+      ? parameters[parameterGroupIndex]
+      : parameters;
+
+    if (!isRouteParameters(parameterSource)) {
+      throw new TypeError(
+        "Compiler-safe dynamic routes require their inferred params object.",
+      );
+    }
+
+    const selectedParameters: Record<string, string | number> = {};
+    for (const name of segment.value) {
+      const value = parameterSource[name];
+      if (typeof value !== "string" && typeof value !== "number") {
+        throw new TypeError(`Missing Treaty route parameter: ${name}.`);
+      }
+      selectedParameters[name] = value;
+    }
+
+    resolved.push(Object.freeze({
+      kind: "parameters" as const,
+      value: Object.freeze(selectedParameters),
+    }));
+    parameterGroupIndex += 1;
+  }
+
+  if (parameterGroupIndex === 0 && parameters !== undefined) {
+    throw new TypeError(
+      "This Treaty Query route does not declare compiler-safe parameters.",
+    );
+  }
+
+  return Object.freeze(resolved);
+}
+
+function splitHookQueryInput(
+  input: unknown,
+): {
+  readonly input: GetInput<unknown> | undefined;
+  readonly parameters: unknown;
+} {
+  if (
+    typeof input !== "object" ||
+    input === null ||
+    !("params" in input)
+  ) {
+    return {
+      input: input as GetInput<unknown>,
+      parameters: undefined,
+    };
+  }
+
+  const { params, ...semanticInput } = input as Readonly<
+    Record<string, unknown>
+  >;
+
+  return {
+    input: Object.keys(semanticInput).length === 0
+      ? undefined
+      : semanticInput as GetInput<unknown>,
+    parameters: params,
+  };
+}
+
+function splitHookMutationOptions(
+  options: unknown,
+): {
+  readonly options:
+    | MutationOperationOptions<unknown, unknown>
+    | undefined;
+  readonly mutationKey: MutationKey | undefined;
+  readonly parameters: unknown;
+} {
+  if (
+    typeof options !== "object" ||
+    options === null ||
+    !("params" in options)
+  ) {
+    return {
+      options: options as MutationOperationOptions<unknown, unknown> | undefined,
+      mutationKey: undefined,
+      parameters: undefined,
+    };
+  }
+
+  const { params, mutationKey, ...operationOptions } = options as Readonly<
+    Record<string, unknown>
+  >;
+
+  return {
+    options: operationOptions as MutationOperationOptions<unknown, unknown>,
+    mutationKey: mutationKey as MutationKey | undefined,
+    parameters: params,
+  };
+}
+
 function createHookRouteProxy(
   clientContext: Context<unknown>,
   cacheScopeContext: Context<CacheScope | undefined>,
-  route: readonly RouteSegment[],
+  route: readonly HookRouteSegment[],
   keyPrefix: readonly SerializableValue[] | undefined,
   mapError: TreatyQueryErrorMapper | undefined,
 ): unknown {
+  const propertyCache = new Map<PropertyKey, unknown>();
+
   return new Proxy(function treatyQueryHookRoute(): void {}, {
     get(_target, property): unknown {
+      if (property === "then" || property === "catch" || property === "finally") {
+        return undefined;
+      }
+
+      if (propertyCache.has(property)) {
+        return propertyCache.get(property);
+      }
+
+      let value: unknown;
+
       if (property === routeSegment) {
-        return (segment: string): unknown => {
+        value = (segment: string): unknown => {
           if (segment.length === 0) {
             throw new TypeError("An escaped Treaty route segment cannot be empty.");
           }
@@ -232,23 +546,26 @@ function createHookRouteProxy(
           return createHookRouteProxy(
             clientContext,
             cacheScopeContext,
-            appendEscapedRouteProperty(route, segment),
+            appendEscapedHookRouteProperty(route, segment),
             keyPrefix,
             mapError,
           );
         };
-      }
-
-      if (property === "then" || property === "catch" || property === "finally") {
-        return undefined;
-      }
-      if (typeof property !== "string") return undefined;
-
-      if (property === "get") {
-        return Object.freeze({
+      } else if (typeof property !== "string") {
+        value = undefined;
+      } else if (property.startsWith("$") && property.length > 1) {
+        value = createHookRouteProxy(
+          clientContext,
+          cacheScopeContext,
+          appendHookParameterName(route, property.slice(1)),
+          keyPrefix,
+          mapError,
+        );
+      } else if (property === "get") {
+        value = Object.freeze({
           useQuery<TData>(
-            input?: GetInput<unknown>,
-            options?: GetOperationOptions<unknown, TData>,
+            input?: unknown,
+            options?: HookQueryOptions<unknown, TData, undefined>,
           ): UseQueryResult<TData, Error> {
             const client = useContext(clientContext);
             const inheritedCacheScope = useContext(cacheScopeContext);
@@ -259,30 +576,37 @@ function createHookRouteProxy(
               );
             }
 
-            const method = resolveRouteMethod(client, route, "get");
+            const splitInput = splitHookQueryInput(input);
+            const resolvedRoute = resolveHookRoute(
+              route,
+              splitInput.parameters,
+            );
+            const method = resolveRouteMethod(client, resolvedRoute, "get");
             const operation = createGetOperation(
               method,
-              route,
+              resolvedRoute,
               keyPrefix,
               inheritedCacheScope,
               mapError,
             );
-            const runtimeInput = input as unknown as GetInput<unknown>;
-            const runtimeOptions = options as unknown as
-              | GetOperationOptions<unknown, TData>
-              | undefined;
+            const { queryKey, ...operationOptions } = options ?? {};
+            const generatedOptions = operation.queryOptions(
+              splitInput.input as GetInput<unknown>,
+              operationOptions,
+            );
+            const hookOptions = queryKey === undefined
+              ? generatedOptions
+              : { ...generatedOptions, queryKey };
 
             return useQuery(
-              operation.queryOptions(runtimeInput, runtimeOptions),
+              hookOptions as unknown as Parameters<typeof useQuery>[0],
             ) as UseQueryResult<TData, Error>;
           },
         });
-      }
-
-      if (isMutationMethodName(property)) {
-        return Object.freeze({
+      } else if (isMutationMethodName(property)) {
+        value = Object.freeze({
           useMutation<TOnMutateResult = unknown>(
-            options?: MutationOperationOptions<unknown, TOnMutateResult>,
+            options?: unknown,
           ): UseMutationResult<unknown, Error, unknown, TOnMutateResult> {
             const client = useContext(clientContext);
 
@@ -292,11 +616,20 @@ function createHookRouteProxy(
               );
             }
 
-            const treatyMethod = resolveRouteMethod(client, route, property);
+            const splitOptions = splitHookMutationOptions(options);
+            const resolvedRoute = resolveHookRoute(
+              route,
+              splitOptions.parameters,
+            );
+            const treatyMethod = resolveRouteMethod(
+              client,
+              resolvedRoute,
+              property,
+            );
             const operation = createMutationOperation(
               treatyMethod,
               property,
-              route,
+              resolvedRoute,
               keyPrefix,
               mapError,
             ) as {
@@ -308,8 +641,21 @@ function createHookRouteProxy(
               ): MutationFactoryResult<unknown, TOnMutateResult>;
             };
 
+            const generatedOptions = operation.mutationOptions(
+              splitOptions.options as MutationOperationOptions<
+                unknown,
+                TOnMutateResult
+              >,
+            );
+            const hookOptions = splitOptions.mutationKey === undefined
+              ? generatedOptions
+              : {
+                  ...generatedOptions,
+                  mutationKey: splitOptions.mutationKey,
+                };
+
             return useMutation(
-              operation.mutationOptions(options),
+              hookOptions as Parameters<typeof useMutation>[0],
             ) as unknown as UseMutationResult<
               unknown,
               Error,
@@ -318,15 +664,18 @@ function createHookRouteProxy(
             >;
           },
         });
+      } else {
+        value = createHookRouteProxy(
+          clientContext,
+          cacheScopeContext,
+          appendHookRouteProperty(route, property),
+          keyPrefix,
+          mapError,
+        );
       }
 
-      return createHookRouteProxy(
-        clientContext,
-        cacheScopeContext,
-        appendRouteProperty(route, property),
-        keyPrefix,
-        mapError,
-      );
+      propertyCache.set(property, value);
+      return value;
     },
     apply(_target, _thisArgument, argumentsList): unknown {
       const parameters = argumentsList[0];
@@ -340,7 +689,7 @@ function createHookRouteProxy(
       return createHookRouteProxy(
         clientContext,
         cacheScopeContext,
-        appendRouteParameters(route, parameters),
+        appendHookRouteParameters(route, parameters),
         keyPrefix,
         mapError,
       );

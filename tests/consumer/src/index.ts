@@ -74,7 +74,10 @@ if (
   version !== "0.1.1" ||
   productOptions.queryKey[0] !== "treaty-query" ||
   JSON.stringify(scopedHealthOptions.queryKey[1]) !==
-    JSON.stringify(["scope", ["user", { id: "consumer-user" }]])
+    JSON.stringify({
+      kind: "treaty-query-scope",
+      value: ["user", { id: "consumer-user" }],
+    })
 ) {
   throw new Error("The packed treaty-query package returned invalid metadata.");
 }
@@ -88,6 +91,7 @@ if (
   typeof tq.CacheScope !== "function" ||
   typeof tq.useUtils !== "function" ||
   typeof tq.search.get.useQuery !== "function" ||
+  typeof tq.products.$id.get.useQuery !== "function" ||
   typeof tq.products({ id: 1 }).get.useQuery !== "function" ||
   typeof tq.products.post.useMutation !== "function"
 ) {
@@ -95,6 +99,14 @@ if (
 }
 
 if (false) {
+  tq.products.$id.get.useQuery(
+    { params: { id: 42 } },
+    { queryKey: ["consumer", "product", 42] },
+  );
+  tq.products.post.useMutation({
+    mutationKey: ["consumer", "create-product"],
+  });
+
   const utils = tq.useUtils();
   const productKey = utils.products({ id: 42 }).get.queryKey();
   const cachedProduct = utils.products({ id: 42 }).get.getData();

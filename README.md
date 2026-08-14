@@ -47,7 +47,7 @@ tRPC-style route-proxy experience over that client for TanStack Query:
 
 ```ts
 tq.account.access.get.useQuery();
-tq.products({ id }).patch.useMutation();
+tq.products.$id.patch.useMutation({ params: { id } });
 await tq.useUtils().products.invalidate();
 ```
 
@@ -105,14 +105,40 @@ const products = tq.products.get.useQuery({
 });
 ```
 
-Dynamic route parameters use Treaty's natural call syntax:
+For React Compiler-compatible dynamic routes, use the inferred `$parameter`
+properties and pass their values under `params`:
 
 ```tsx
-const product = tq.products({ id: productId }).get.useQuery();
+const product = tq.products.$id.get.useQuery({
+  params: { id: productId },
+});
 
-const order = tq.organizations({ organizationId })
-  .orders({ orderId })
-  .get.useQuery();
+const order = tq.organizations.$organizationId
+  .orders.$orderId.get.useQuery({
+    params: { organizationId, orderId },
+  });
+```
+
+The marker names are inferred from Treaty's route-parameter types. They are
+resolved to ordinary Treaty route calls when the hook runs, and the parameter
+values remain in their normal positions in the query key. For multiple dynamic
+route groups, a flat `params` object is convenient when names are unique. An
+ordered tuple is also accepted and supports repeated parameter names:
+
+```tsx
+const item = tq.groups.$id.items.$id.get.useQuery({
+  params: [{ id: groupId }, { id: itemId }],
+});
+```
+
+Treaty's natural callable syntax remains available for helpers, cache
+utilities, and backward-compatible runtime use. React Compiler cannot prove a
+hook obtained after a render-time route call is stable, so compiled components
+should use the `$parameter` form:
+
+```ts
+helpers.products({ id: productId }).get.queryOptions();
+utils.products({ id: productId }).get.invalidate();
 ```
 
 A hook must be rendered under the `Provider` from the same
@@ -206,6 +232,37 @@ const tq = createTreatyQuery<App>({
 });
 ```
 
+## Custom React hook keys
+
+React hooks use Treaty Query's generated key by default. Supply TanStack's
+ordinary `queryKey` or `mutationKey` option when an application needs to join
+an existing custom key convention:
+
+```tsx
+const product = tq.products.$id.get.useQuery(
+  { params: { id } },
+  { queryKey: ["application-cache", "product", id] },
+);
+
+const updateProduct = tq.products.$id.patch.useMutation({
+  params: { id },
+  mutationKey: ["application-mutations", "product", id],
+});
+```
+
+These options replace the complete generated key for that hook; they do not
+extend it. The route, parameters, input, transport, and inferred result types
+still work normally, but `tq.useUtils()` and `removeCacheScope()` operate on
+canonical Treaty Query keys and therefore do not match a custom query key.
+Include every value that can change the response, including a safe non-secret
+session identity when hidden server context matters. Never place tokens,
+cookies, authorization headers, or other secrets in a custom key.
+
+Key overrides are intentionally hook-only. `createHelpers().queryOptions()`
+and `.mutationOptions()` continue to return canonical keys for loaders,
+prefetching, cache utilities, and SSR. Prefer the generated keys unless the
+application is deliberately taking ownership of cache-key coordination.
+
 ## Optional cache scopes
 
 Use a cache scope only when a GET response depends on hidden server context,
@@ -261,11 +318,19 @@ ordinary route parameters and semantic query input:
 ```ts
 [
   "treaty-query",
-  ["scope", ["user", userId]],
+  {
+    kind: "treaty-query-scope",
+    value: ["user", userId],
+  },
   ["account", "access"],
   { kind: "query", method: "GET" },
 ]
 ```
+
+Scope and application-prefix metadata use frozen tagged objects, while route
+paths use arrays. The structurally distinct shapes prevent real routes such as
+`/scope/admin` from being mistaken for scope metadata during TanStack's prefix
+matching.
 
 After logout or an account switch, remove the previous scope once components
 using it have unmounted or switched values:
@@ -459,11 +524,13 @@ createProduct.mutate({
 });
 ```
 
-Dynamic parameters stay captured by the route. Mutation query parameters,
-headers, and fetch settings are static for that mutation observer:
+Dynamic parameters are fixed in the hook options. Mutation variables remain
+the inferred Treaty body directly; query parameters, headers, and fetch
+settings are also static for that mutation observer:
 
 ```tsx
-const updateProduct = tq.products({ id }).patch.useMutation({
+const updateProduct = tq.products.$id.patch.useMutation({
+  params: { id },
   request: {
     query: { notify: true },
     headers: { "x-operation-id": operationId },
@@ -510,7 +577,9 @@ utils[routeSegment]("invalidate").get.queryKey();
 Treaty Query proxies deliberately expose `.then`, `.catch`, and `.finally` as
 undefined so `await`, `Promise.resolve`, and framework runtimes do not mistake
 them for promises. The symbol escape is type-safe and is included in generated
-keys as the original string segment.
+keys as the original string segment. In React hook chains, properties beginning
+with `$` are reserved for compiler-safe route-parameter markers. Use
+`routeSegment` for a literal route name that begins with `$`.
 
 ## Compatibility and limitations
 

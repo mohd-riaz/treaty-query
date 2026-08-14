@@ -1,7 +1,6 @@
 import {
   hashKey,
   type QueryClient,
-  type QueryKey,
 } from "@tanstack/react-query";
 
 import type {
@@ -87,7 +86,10 @@ export function normalizeCacheScope(value: CacheScope): CacheScope {
 }
 
 export function createCacheScopeMarker(value: CacheScope): TreatyQueryScope {
-  return Object.freeze(["scope", normalizeCacheScope(value)]);
+  return Object.freeze({
+    kind: "treaty-query-scope" as const,
+    value: normalizeCacheScope(value),
+  });
 }
 
 export function resolveCacheScope(
@@ -103,9 +105,18 @@ function isPrefixMarker(
   value: unknown,
   expected: TreatyQueryPrefix,
 ): boolean {
-  return Array.isArray(value) &&
-    value[0] === "prefix" &&
-    hashKey(value as QueryKey) === hashKey(expected as QueryKey);
+  return typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as { readonly kind?: unknown }).kind === "treaty-query-prefix" &&
+    hashKey([value]) === hashKey([expected]);
+}
+
+function isScopeMarker(value: unknown): value is TreatyQueryScope {
+  return typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as { readonly kind?: unknown }).kind === "treaty-query-scope";
 }
 
 function getScopeMarker(
@@ -124,15 +135,14 @@ export function removeCacheScopeQueries(
   prefix: TreatyQueryPrefix | undefined,
   scope: CacheScope,
 ): void {
-  const expectedHash = hashKey(createCacheScopeMarker(scope) as QueryKey);
+  const expectedHash = hashKey([createCacheScopeMarker(scope)]);
 
   queryClient.removeQueries({
     predicate(query): boolean {
       const marker = getScopeMarker(query.queryKey, prefix);
 
-      return Array.isArray(marker) &&
-        marker[0] === "scope" &&
-        hashKey(marker as QueryKey) === expectedHash;
+      return isScopeMarker(marker) &&
+        hashKey([marker]) === expectedHash;
     },
   });
 }

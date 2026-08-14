@@ -7,6 +7,7 @@
   "include": [
     "./static-get.test.ts",
     "./mutation.test.ts",
+    "./react-compiler.test.ts",
     "./react-use-query.test.tsx",
     "./cache-scope.test.tsx",
     "./external-helpers.test.ts"
