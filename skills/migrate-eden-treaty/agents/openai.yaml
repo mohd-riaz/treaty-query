@@ -1,0 +1,4 @@
+interface:
+  display_name: "Migrate Eden Treaty"
+  short_description: "Migrate Eden Treaty apps to Treaty Query"
+  default_prompt: "Use $migrate-eden-treaty to migrate this Eden Treaty app to Treaty Query incrementally and verify cache safety."

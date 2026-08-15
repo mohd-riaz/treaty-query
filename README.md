@@ -609,6 +609,20 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) before proposing changes.
 Maintainers should follow [the release procedure](./docs/releasing.md); it
 contains a hard stop before publication.
 
+## AI-assisted migration
+
+The repository includes a reusable agent skill for incrementally migrating an
+existing Eden Treaty application to Treaty Query. It inventories direct client
+calls, chooses hooks or helpers by execution context, preserves transport and
+error semantics, applies cache scopes only where hidden session context needs
+them, and verifies the migration route by route.
+
+Install or point a compatible coding agent at
+[the complete migration skill directory](https://github.com/mohd-riaz/treaty-query/tree/main/skills/migrate-eden-treaty),
+then invoke it as `$migrate-eden-treaty`. Keep the directory together so its
+reference guide remains available. The skill is repository tooling and is not
+included in the runtime npm package.
+
 ## License
 
 MIT
