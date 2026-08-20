@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file.
 - Added a public `$migrate-eden-treaty` coding-agent skill for incrementally
   migrating existing Eden Treaty applications to Treaty Query, including React,
   TanStack Query, cache-scope, React Compiler, loader, and SSR guidance.
+- Added a public `$use-treaty-query` coding-agent skill for setting up new
+  Treaty Query features with typed hooks, mutations, cache utilities, safe
+  cache scopes, loaders, and SSR.
 
 ## 0.2.0 - 2026-08-14
 

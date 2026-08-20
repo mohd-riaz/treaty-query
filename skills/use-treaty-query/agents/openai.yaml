@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Treaty Query"
+  short_description: "Build typed React Query features with Treaty Query"
+  default_prompt: "Use $use-treaty-query to add a typed Treaty Query feature to this Elysia application and verify it."

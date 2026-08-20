@@ -609,19 +609,26 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) before proposing changes.
 Maintainers should follow [the release procedure](./docs/releasing.md); it
 contains a hard stop before publication.
 
-## AI-assisted migration
+## AI-assisted usage and migration
 
-The repository includes a reusable agent skill for incrementally migrating an
-existing Eden Treaty application to Treaty Query. It inventories direct client
-calls, chooses hooks or helpers by execution context, preserves transport and
-error semantics, applies cache scopes only where hidden session context needs
-them, and verifies the migration route by route.
+The repository includes reusable coding-agent skills:
 
-Install or point a compatible coding agent at
-[the complete migration skill directory](https://github.com/mohd-riaz/treaty-query/tree/main/skills/migrate-eden-treaty),
-then invoke it as `$migrate-eden-treaty`. Keep the directory together so its
-reference guide remains available. The skill is repository tooling and is not
-included in the runtime npm package.
+- [`$use-treaty-query`](https://github.com/mohd-riaz/treaty-query/tree/main/skills/use-treaty-query)
+  sets up Treaty Query and implements typed React hooks, mutations, cache
+  utilities, scopes, loaders, and SSR for new features.
+- [`$migrate-eden-treaty`](https://github.com/mohd-riaz/treaty-query/tree/main/skills/migrate-eden-treaty)
+  incrementally migrates an existing application from direct Eden Treaty calls.
+
+Install either skill from the public repository:
+
+```sh
+npx skills add mohd-riaz/treaty-query --skill use-treaty-query
+npx skills add mohd-riaz/treaty-query --skill migrate-eden-treaty
+```
+
+Keep each installed directory together so its reference guides remain
+available. These skills are repository tooling and are not included in the
+runtime npm package.
 
 ## License
 
